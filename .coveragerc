@@ -1,0 +1,15 @@
+[run]
+omit =
+    tests/*
+    APHDC_pb2.py
+    constants.py
+[report]
+show_missing = true
+exclude_lines =
+    pragma: no cover
+    if __name__ == '__main__':
+    import
+    CRAWLER_CONSTRUCTOR_MAP
+    """
+[xml]
+output = cov.xml

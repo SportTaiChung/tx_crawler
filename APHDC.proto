@@ -1,0 +1,121 @@
+syntax = "proto3";
+package protobuf;
+
+option java_package = "jst.java.mservice.catcher.protobuf";
+option java_outer_classname = "APHDC";
+
+message ApHdcArr {
+	repeated ApHdc aphdc = 1;
+}
+
+message ApHdc {
+	string source = 1; //來源 可能值(TX,PS38,CTX,SB,PIN)
+	string game_class = 2; //球種 可能值(mlb,npb,kbo,cpbl,basketball,otherbasketball,tennis,eSport,hockey,football,soccer,ucl,other)，mlb(美棒)、npb(日棒)、kbo(韓棒)、cpbl(台棒)、basketball(NBA)
+	string game_type = 3; //全場、半場 可能值(full,1st half,2nd half,live full, live 1st half)
+	string game_id = 4; // key 賽事編號
+	string ip =5; // ip
+	string status = 6; // 沒在用 目前塞0或空值
+	string event_time = 7; //賽事時間，台灣時間為主（GMT +8）
+	string source_updatetime = 8; //更新時間（抓取資料時間）
+	string live = 9; //是否為走地、滾球 可能值("true", "false")
+	string live_time = 10; //走地時間 (1-100)或以上的分鐘數
+	information information = 11; //球賽資訊
+	score score = 12; // 比分
+	redcard redcard = 13; // 紅牌
+	yellowcard yellowcard = 14; // 黃牌
+	conner conner = 15; // 角球
+	usZF usZF = 16; //美盤讓分
+	typeDS usDS = 17; //美盤大小
+	twZF twZF = 18; //台盤讓分（音譯）
+	typeDS twDS = 19; //台盤大小（音譯）
+	onetwo de = 20; //獨贏盤（音譯）
+	onetwo sd = 21; //單雙盤（single double）
+	Esre esre = 22; //一輸二贏盤（音譯）
+	string draw = 23; //
+	string multi = 24; //波膽
+}
+
+//一輸二贏
+message Esre {
+	whichTeam let = 1; // 讓隊
+	string home = 2;   // 賠率
+	string away = 3;   // 賠率
+}
+
+//獨贏 和 單雙都使用這個格式
+message onetwo {    
+	string home = 1;  // 賠率
+	string away = 2;  // 賠率
+}
+
+//美盤讓分
+message usZF{
+	typeZF homeZF = 1;  // 主隊讓分盤口
+	typeZF awayZF = 2;  // 客隊讓分盤口
+}
+
+//台盤讓分
+message twZF {
+	typeZF homeZF = 1;  // 主隊讓分盤口
+	typeZF awayZF = 2;  // 客隊讓分盤口
+}
+
+
+//大小盤口
+message typeDS {
+	string line = 1;  // 球頭
+	string over = 2;  // 賠率
+	string under = 3; // 賠率
+}
+
+//讓分盤口
+message typeZF {
+	string line = 1; // 球頭
+	string odds = 2; // 賠率
+}
+
+//球頭
+enum whichTeam {
+	none = 0;
+	home = 1;
+	away = 2;
+}
+
+//分數
+message score {
+	string home = 1;  //比分數字
+	string away = 2;  //比分數字
+}
+
+//紅牌
+message redcard {
+	string home = 1;  //紅牌數字
+	string away = 2;  //紅牌數字
+}
+
+//黃牌
+message yellowcard {
+	string home = 1;  //黃牌數字
+	string away = 2;  //黃牌數字
+}
+
+//角球
+message conner {
+	string home = 1;  //角球數字
+	string away = 2;  //角球數字
+}
+
+message information {
+	string league = 1;   // 聯盟
+	string cn_league = 2;// 簡中名稱
+	string en_league = 3;// 英文名稱
+	infoHA home = 4;     // 主隊資訊
+	infoHA away = 5;     // 客隊資訊
+}
+
+message infoHA {
+	string team_name = 1;//隊名
+	string pitcher = 2;  // 棒球投手名
+	string cn_name = 3;  // 簡中名稱
+	string en_name = 4;  // 英文名稱
+}

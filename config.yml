@@ -1,0 +1,26 @@
+tha_domains:
+  - https://td55.net
+  - https://tx.jd55.net
+  - https://tx.tx77777.com
+  - https://tc88.net
+  - https://tx.itx5588.com
+
+leo_domains:
+  - https://tj777.net
+  - https://www.ne88.net
+  - https://www.wa777.net
+  - https://www.de77.net
+  - https://iju888.net
+  - https://ts.an77.net
+  - https://www.fa77.net
+
+api_path:
+  login: LoadData/Pb.ashx
+  logout: LoadData/End.ashx
+  redirect_selection : Platform/LoginBallPlatform.aspx?gamenum=1&isphone=0
+  availalbe_redirect_sites : LoadData/AutoLines.ashx
+  redirect_destination: memberball_new1/Page/Index/Pd.aspx
+  bet_site_home: memberball_new1/Page/Index/Index.aspx
+  sport_info: memberball_new1/Page/Index/ashx/TS_NewLeftSport.ashx
+  event_api: memberball_new1/Page/BallGame/Ashx_New/TS_BallGameDoubleRow_Ajax.ashx
+  special_handicap_api: memberball_new1/Page/BallGame/Ashx_New/TS_BallGameFootBallThreePlay_Ajax.ashx

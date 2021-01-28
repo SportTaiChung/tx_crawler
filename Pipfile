@@ -1,0 +1,34 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+pytest = "*"
+tox = "*"
+pylint = "*"
+pycodestyle = "*"
+pytest-cov = "*"
+pytest-asyncio = "*"
+pytest-aiohttp = "*"
+yapf = "*"
+rope = "*"
+asynctest = "*"
+
+[packages]
+aiohttp = "*"
+aio-pika = "*"
+aiofiles = "*"
+aiologger = "*"
+arrow = "*"
+ujson = "*"
+pyyaml = "*"
+fake-useragent = "*"
+protobuf = "*"
+supervisor = "*"
+opencc = "==0.2"
+xxtea-py = "*"
+cffi = "*"
+
+[requires]
+python_version = "3.8"
