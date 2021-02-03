@@ -7,11 +7,10 @@ import asyncio
 import os
 from datetime import datetime, timedelta
 import logging
-from test import xxtea_decrypt
 import uuid
 import random
 from functools import wraps
-from itertools import cycle
+from itertools import cycle, product
 import traceback
 from time import time
 from math import floor, hypot
@@ -81,6 +80,10 @@ class TXCrawler:
         self.task_failed = False
         self.last_success_time = datetime.now()
         self.ip_addr = ''
+        self._session = None
+        self._session_info = None
+        self._sport_info = None
+        self._mq = None
         self.user_agent = UserAgent(fallback=DEFAULT_USER_AGENT)
         self.headers = self._config['login_headers']
         self._session_login_info_map = {}
@@ -94,20 +97,31 @@ class TXCrawler:
                                                   'play_type': self.task_spec['period']
                                               })
 
-    async def run(self):
+    async def reset_session(self, session):
+        try:
+            sport_info = await self.query_sport_info(session)
+            if sport_info:
+                self._session = session
+                return True
+        except aiohttp.ClientError:
+            await self.logger.error('重設連線失敗')
+        return False
+
+    async def run(self, session, task_info, mq):
         self.logger = self._logger_factory
         sessions = []
         if not self._config['read_from_file']:
-            # await self.init_mq()
+            await self.init_mq()
             if self._config['debug'] and os.path.exists('saved_cookies.pickle'):
                 with open('saved_cookies.pickle', 'rb') as session_file:
                     cookies = pickle.load(session_file, pickle.HIGHEST_PROTOCOL)
                     sessions = await self.init_session(cookies=cookies)
             else:
                 sessions = await self.init_session()
+            session = sessions[0]
             if self._config.get('env') == 'production':
                 telegram_handler = AsyncTelegramHandler(
-                    session=sessions[0],
+                    session=session,
                     config=self._config,
                     level=logging.ERROR
                 )
@@ -120,7 +134,7 @@ class TXCrawler:
                 with open(self._config['read_from_file']) as f:
                     raw_data = json.load(f)
             else:
-                raw_data = await self.crawl_data(sessions[0])
+                raw_data = await self.crawl_data(session)
                 if self._config['dump']:
                     with open(f'{self.name}.json', mode='w') as f:
                         f.write(json.dumps(raw_data, ensure_ascii=False))
@@ -139,16 +153,15 @@ class TXCrawler:
             self.last_execution_time = datetime.now()
             await asyncio.sleep(self._config['sleep'])
         if not self._config['debug']:
-            for session in sessions:
-                await self.logout(session)
+            if not self._config['read_from_file']:
+                await self.logout(sessions[0])
                 await session.close()
         else:
             with open('saved_sessions.pickle', 'wb') as session_file:
                 pickle.dump(list(map(lambda s: dict(s._cookie_jar._cookies), sessions)), session_file, pickle.HIGHEST_PROTOCOL)
-            for session in sessions:
-                await session.close()
+            await session.close()
         await self.logger.info('停止爬蟲')
-    
+
     async def init_mq(self):
         self.mq_session = await aio_pika.connect_robust(self._config['rabbitmqUrl'])
         self.mq_channel = await self.mq_session.channel()
@@ -171,8 +184,8 @@ class TXCrawler:
             if domains:
                 if await self.login(session, domains, account, account_info['password']):
                     if await self.redirect_bet_site(session):
-                        sport_info = await self.query_sport_info(session)
-                        if 'listBallCountryMenu' in sport_info:
+                        self._sport_info = await self.query_sport_info(session)
+                        if 'listBallCountryMenu' in self._sport_info:
                             sessions.append(session)
         return sessions
 
@@ -214,6 +227,7 @@ class TXCrawler:
                                 self._session_login_info_map[session] = {
                                     'account': account,
                                     'password': password,
+                                    'visited_domain': domain,
                                     'logined_domain': domain,
                                     'success_time': datetime.now()
                                 }
@@ -232,17 +246,23 @@ class TXCrawler:
         return False
 
     async def logout(self, session):
-        session_info = self._session_login_info_map[session]
         form = {
             '_': round(time() * 1000)
         }
+        session_info = self._session_login_info_map[session]
         async with session.post(
-                f'{session_info["logined_domain"]}{self._config["api_path"]["logout"]}',
+                f'{session_info["visited_domain"]}/{self._config["api_path"]["logout"]}',
                 data=form,
                 headers=self._config['login_headers']) as logout_resp:
             if not logout_resp.ok:
-                await self.logger.warning(f'登出失敗，狀態碼: {logout_resp.status}，域名: {session_info["logined_domain"]}')
-    
+                await self.logger.warning(f'登出失敗，狀態碼: {logout_resp.status}，域名: {session_info["visited_domain"]}')
+
+    def get_session(self):
+        return self._session
+
+    def get_session_info(self):
+        return self._session_info
+
     async def redirect_bet_site(self, session):
         session_info = self._session_login_info_map[session]
         verify_key = None
@@ -284,7 +304,7 @@ class TXCrawler:
                     session_info['logined_domain'] = fast_domain
                     return True
         return False
-    
+
     async def select_fast_url(self, session, accessible_domains):
         loop = asyncio.get_running_loop()
         domain_speed_test = []
@@ -312,7 +332,7 @@ class TXCrawler:
         session_info = self._session_login_info_map[session]
         async with session.get(f'{session_info["logined_domain"]}/{self._config["api_path"]["sport_info"]}') as sport_info_resp:
             if not sport_info_resp.ok:
-                await self.logger.error(f'登入驗證失敗，無法存取盤口資訊，{sport_info_resp.status}，訊息: {await sport_info_resp.text()}')
+                await self.logger.error(f'登入驗證失敗，無法存取球種資訊列表，{sport_info_resp.status}，訊息: {await sport_info_resp.text()}')
             else:
                 raw_text = await sport_info_resp.text()
                 try:
@@ -321,28 +341,31 @@ class TXCrawler:
                     return {}
                 return sport_info
         return {}
-    
+
     @step_logger('crawl_data')
     async def crawl_data(self, session):
         game_type = self.task_spec['game_type']
-        sport_info = await self.query_sport_info(session)
         # sport_type_name = sport_event_info[TX.Key.SPORT_NAME].split('||')[TX.Pos.Lang.TRADITIONAL_CHINESE]
         # sport_type = TX.Value.SportType[sport_event_info[TX.Key.SPORT_TYPE]]
         # ball_type = TX.Value.BallType[sport_event_info[TX.Key.BALL_TYPE]]
         sport_type = TX.Value.SportType.get_sport_type(game_type)
-        ball_type = TX.Value.BallType.get_ball_type(game_type)
-        sport_list = sport_info[TX.Key.SPORT_EVENT_INFO]
+        ball_type = TX.Value.BallType.get_ball_type(game_type, self.task_spec['category'])
+        sport_list = self._sport_info[TX.Key.SPORT_EVENT_INFO]
         sport_info_map = {}
         for sport in sport_list:
             sport_info_map[sport[TX.Key.BALL_TYPE]] = sport
-        sport_info = sport_info_map[ball_type.value]
+        sport_info = None
+        if self.task_spec['category'] in ('pd', 'tg', 'hf'):
+            sport_info = sport_info_map[TX.Value.BallType.SOCCER.value]
+        else:
+            sport_info = sport_info_map[ball_type.value]
         is_world_cup = sport_info.get(TX.Key.IS_WORLD_CUP, '0')
         is_olympic = 'true' if sport_type is TX.Value.SportType.SOCCER_OLYMPIC else 'false'
         if is_olympic == 'true':
             sport_type = TX.Value.SportType.SOCCER
         sort_type = TX.Value.SortType.TIME_SORT if sport_type is TX.Value.SportType.SOCCER else TX.Value.SortType.HOT_SORT
         timestamp_millisecond = int(time() * 1000)
-        page_number = 1
+        page_number = self.task_spec.get('page', 1)
         form = {
             'BallType': ball_type.value,
             'BallId': ball_type.get_id().value,
@@ -357,6 +380,8 @@ class TXCrawler:
         api_url = self._config['api_path']['event_api']
         if self.task_spec['category'] in ('pd', 'tg', 'hf'):
             api_url = self._config['api_path']['special_handicap_api']
+            del form['Scene']
+            del form['CountryId']
         data = None
         session_info = self._session_login_info_map[session]
         async with session.get(f'{session_info["logined_domain"]}/{api_url}', data=form) as api_resp:
@@ -372,7 +397,7 @@ class TXCrawler:
             else:
                 await self.logger.error(f'請求資料失敗，狀態碼:{api_resp.status}，headers: {api_resp.headers}')
         return data
-    
+
     def decrypt_data(self, encrypted_parts):
         decrypted_data = None
         # hash key 移除結尾換行
@@ -381,18 +406,18 @@ class TXCrawler:
         encrypted_info = encrypted_parts[TX.Pos.Encryption.INFO]
         encrypted_data = encrypted_parts[TX.Pos.Encryption.DATA]
         if encryption_type == '2':
-            decrypted_info = json.loads(xxtea_decrypt(encrypted_info, hash_key))
+            decrypted_info = json.loads(self.xxtea_decrypt(encrypted_info, hash_key))
             decrypted_data = self.decrypt_type2(encrypted_data, decrypted_info, hash_key)
         elif encryption_type == '3':
-            decrypted_info = json.loads(xxtea_decrypt(encrypted_info, hash_key))
+            decrypted_info = json.loads(self.xxtea_decrypt(encrypted_info, hash_key))
             decrypted_data = self.decrypt_type3(encrypted_data, decrypted_info, hash_key)
         elif encryption_type == '0':
-            decrypted_info = json.loads(xxtea_decrypt(encrypted_info, hash_key))
+            decrypted_info = json.loads(self.xxtea_decrypt(encrypted_info, hash_key))
             decrypted_data = self.decrypt_type0(encrypted_data, decrypted_info, hash_key)
         elif encryption_type == '4':
-            decrypted_data = json.loads(xxtea_decrypt(encrypted_data, hash_key))
+            decrypted_data = json.loads(self.xxtea_decrypt(encrypted_data, hash_key))
         return decrypted_data
-    
+
     def decrypt_type2(self, encrypted_data, info, key):
         decrypted_data = []
         part1_1_len = int(info['part1_1'])
@@ -496,7 +521,7 @@ class TXCrawler:
             else:
                 decrypted_data.append(urllib.parse.unquote(part))
         return json.loads(''.join(decrypted_data))
-    
+
     def xxtea_decrypt(self, data, key):
         base64_data = base64.b64decode(data)
         decrypted_data = xxtea.decrypt_utf8(base64_data, key)
@@ -504,9 +529,10 @@ class TXCrawler:
 
     @step_logger('parsing_and_mapping')
     async def parsing_and_mapping(self, raw_data):
+        event_list_key = Mapping.event_list_key.get(self.task_spec['category'], TX.Key.EVENT_LIST)
         data = protobuf_spec.ApHdcArr()
         # 忽略空資料
-        if not raw_data or not raw_data.get(TX.Key.EVENT_LIST):
+        if not raw_data or not raw_data.get(event_list_key):
             await self.logger.warning('爬到空資料', extra={'step': 'parsing_and_mapping'})
             await self.logger.warning('異常空資料: %s' % json.dumps(raw_data, ensure_ascii=False), extra={'step': 'parsing_and_mapping'})
             return
@@ -520,12 +546,13 @@ class TXCrawler:
         contest_parsing_error_count = 0
         event_proto_list = []
         timestamp_pattern = re.compile(r'/Date\((\d+)\)/')
-        for event_json in raw_data[TX.Key.EVENT_LIST]:
+        for event_json in raw_data[event_list_key]:
             try:
                 event = protobuf_spec.ApHdc()
                 event.source = Source.TX.value
                 sport_name = event_json[TX.Key.EVENT_SPORT_NAME].split('||')[0]
-                game_id = event_json[TX.Key.EVENT_ID]
+                game_id_key = self.get_game_id_key(self.task_spec['category'], event_json[TX.Key.FULL_1ST_TYPE])
+                game_id = event_json[game_id_key]
                 event.game_id = self.modify_game_id(game_id, sport_name)
                 event.ip = ''
                 event.status = '0'
@@ -533,12 +560,12 @@ class TXCrawler:
                 event_time = datetime.fromtimestamp(int(timestamp_str) // 1000)
                 event.event_time = event_time.strftime('%Y-%m-%d %H:%M:%S')
                 event.source_updatetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
-                event.live = 'true' if event_json[TX.Key.EVENT_LIVE] else 'false'
+                event.live = 'true' if event_json[TX.Key.LIVE_TYPE] == '2' else 'false'
                 event_play_time = str(int(event_json[TX.Key.EVENT_LIVE_TIME]))
                 event.live_time = self.get_live_time(event_json[TX.Key.EVENT_LIVE_PERIOD], event_play_time)
                 event_info = protobuf_spec.information()
                 league_names = event_json[TX.Key.EVENT_LEAGUE_NAME_WITH_POSTFIX].split('||')
-                self.add_league_postfix(league_names, self.task_spec['game_type'], event_json)
+                self.add_league_postfix(league_names, sport_name, event_json)
                 event_info.league = league_names[TX.Pos.Lang.TRADITIONAL_CHINESE]
                 event_info.cn_league = league_names[TX.Pos.Lang.SIMPLIFIED_CHINESE]
                 event_info.en_league = league_names[TX.Pos.Lang.ENGLISH]
@@ -592,7 +619,11 @@ class TXCrawler:
                 event.information.CopyFrom(event_info)
                 game_type = GameType[self.task_spec['game_type']]
                 event.game_class = TXCrawler.game_class_convert(game_type, league_names[TX.Pos.Lang.TRADITIONAL_CHINESE])
-                if self.task_spec['period'] in (Period.FULL.value, Period.LIVE.value):
+                if self.task_spec['period'] in (Period.FULL.value,
+                                                Period.LIVE.value, '2nd',
+                                                'special', 'set', 'tennis_set',
+                                                'pingpong_volleyball_set',
+                                                'first_blood', 'kill_hero'):
                     # 全場
                     spread = self.extract_spread(event_json, Period.FULL)
                     total = self.extract_total(event_json, Period.FULL)
@@ -615,26 +646,94 @@ class TXCrawler:
                     event_full.sd.CopyFrom(parity)
                     event_proto_list.append(event_full)
                     # 上半
-                    spread_1st = self.extract_spread(event_json, Period.FIRST_HALF)
-                    total_1st = self.extract_total(event_json, Period.FIRST_HALF)
-                    money_line_1st, draw = self.extract_money_line(event_json, Period.FIRST_HALF)
-                    esre_1st = self.extract_esre(event_json, Period.FIRST_HALF)
-                    parity_1st = self.extract_parity(event_json, Period.FIRST_HALF)
-                    if event_json[TX.Key.TEAM_ORDER] != '0':
-                        self.reverse_odds(spread_1st, money_line_1st, esre_1st)
-                    event_1st = protobuf_spec.ApHdc()
-                    event_1st.CopyFrom(event)
+                    if event_json[TX.Key.SECOND_HALF]:
+                        spread_1st = self.extract_spread(event_json, Period.FIRST_HALF)
+                        total_1st = self.extract_total(event_json, Period.FIRST_HALF)
+                        money_line_1st, draw = self.extract_money_line(event_json, Period.FIRST_HALF)
+                        esre_1st = self.extract_esre(event_json, Period.FIRST_HALF)
+                        parity_1st = self.extract_parity(event_json, Period.FIRST_HALF)
+                        if event_json[TX.Key.TEAM_ORDER] != '0':
+                            self.reverse_odds(spread_1st, money_line_1st, esre_1st)
+                        event_1st = protobuf_spec.ApHdc()
+                        event_1st.CopyFrom(event)
+                        if self.task_spec['period'] == Period.LIVE.value:
+                            event_1st.game_type = Period.LIVE_FIRST_HALF.value
+                        else:
+                            event_1st.game_type = Period.FIRST_HALF.value
+                        event_1st.twZF.CopyFrom(spread_1st)
+                        event_1st.twDS.CopyFrom(total_1st)
+                        event_1st.de.CopyFrom(money_line_1st)
+                        event_1st.draw = str(draw)
+                        event_1st.esre.CopyFrom(esre_1st)
+                        event_1st.sd.CopyFrom(parity_1st)
+                        event_proto_list.append(event_1st)
+                # 搶首尾與單節最高分
+                elif self.task_spec['period'] == 'first_last_point':
+                    event_first_last = protobuf_spec.ApHdc()
+                    event_first_last.CopyFrom(event)
                     if self.task_spec['period'] == Period.LIVE.value:
-                        event_1st.game_type = Period.LIVE_FIRST_HALF.value
+                        event_first_last.game_type = Period.LIVE_FULL.value
                     else:
-                        event_1st.game_type = Period.FIRST_HALF.value
-                    event_1st.twZF.CopyFrom(spread_1st)
-                    event_1st.twDS.CopyFrom(total_1st)
-                    event_1st.de.CopyFrom(money_line_1st)
-                    event_1st.draw = str(draw)
-                    event_1st.esre.CopyFrom(esre_1st)
-                    event_1st.sd.CopyFrom(parity_1st)
-                    event_proto_list.append(event_1st)
+                        event_first_last.game_type = Period.FULL.value
+                    if self.task_spec['game_type'] == 'hockey':
+                        first = self.extract_spread(event_json, Period.FULL)
+                        last = self.extract_total(event_json, Period.FULL)
+                        highest, _ = self.extract_money_line(event_json, Period.FULL)
+                    else:
+                        first, last, highest = self.extract_basketball_special_handicap(event_json)
+                    event_first_last.twZF.CopyFrom(first)
+                    event_first_last.twDS.CopyFrom(last)
+                    event_first_last.de.CopyFrom(highest)
+                    event_proto_list.append(event_first_last)
+                # 波膽
+                elif self.task_spec['category'] == 'pd':
+                    event_pd = protobuf_spec.ApHdc()
+                    event_pd.CopyFrom(event)
+                    # 全場
+                    if event_json[TX.Key.FULL_1ST_TYPE] == '1':
+                        if event_json[TX.Key.LIVE_TYPE] == '2':
+                            event_pd.game_type = Period.CORRECT_SCORE_LIVE.value
+                        else:
+                            event_pd.game_type = Period.CORRECT_SCORE.value
+                        event_pd.multi = self.extract_correct_score(event_json)
+                    # 上半
+                    else:
+                        if event_json[TX.Key.LIVE_TYPE] == '2':
+                            event_pd.game_type = Period.CORRECT_SCORE_LIVE_1ST_HALF.value
+                        else:
+                            event_pd.game_type = Period.CORRECT_SCORE_1ST_HALF.value
+                        event_pd.multi = self.extract_correct_score(event_json)
+                    event_proto_list.append(event_pd)
+                # 入球數
+                elif self.task_spec['category'] == 'tg':
+                    event_tg = protobuf_spec.ApHdc()
+                    event_tg.CopyFrom(event)
+                    # 全場
+                    if event_json[TX.Key.FULL_1ST_TYPE] == '1':
+                        if event_json[TX.Key.LIVE_TYPE] == '2':
+                            event_tg.game_type = Period.SCORE_SUM_LIVE.value
+                        else:
+                            event_tg.game_type = Period.SCORE_SUM.value
+                        event_tg.multi = self.extract_score_sum(event_json, Period.FULL)
+                    # 上半
+                    else:
+                        if event_json[TX.Key.LIVE_TYPE] == '2':
+                            event_tg.game_type = Period.SCORE_SUM_LIVE_1ST_HALF.value
+                        else:
+                            event_tg.game_type = Period.SCORE_SUM_1ST_HALF.value
+                        event_tg.multi = self.extract_score_sum(event_json, Period.FIRST_HALF)
+                    event_proto_list.append(event_tg)
+                # 半全場
+                elif self.task_spec['category'] == 'hf':
+                    event_hf = protobuf_spec.ApHdc()
+                    event_hf.CopyFrom(event)
+                    if event_json[TX.Key.LIVE_TYPE] == '2':
+                        event_hf.game_type = Period.SCORE_SUM_1ST_HALF.value
+                    else:
+                        event_hf.game_type = Period.HALF_FULL_SCORE.value
+                    event_hf.multi = self.extract_half_full_score(event_json)
+                    event_proto_list.append(event_hf)
+
             except (IndexError, KeyError, TypeError):
                 contest_parsing_error_count += 1
                 await self.logger.warning('發生資料映射失敗: %s', traceback.format_exc(), extra={'step': 'parsing_and_mapping'})
@@ -645,10 +744,22 @@ class TXCrawler:
         data.aphdc.extend(event_proto_list)
         return data
 
+    def get_game_id_key(self, category, period):
+        key = TX.Key.EVENT_ID
+        if category in ('all', 'soccer') and period == '0':
+            key = TX.Key.EVENT_ID
+        elif category in ('all', 'soccer') and period == '1':
+            key = TX.Key.EVENT_GP
+        elif category in ('pd', 'tg', 'hf') and period == '0':
+            key = TX.Key.EVENT_ID_1
+        elif category in ('pd', 'tg', 'hf') and period == '1':
+            key = TX.Key.EVENT_ID_GP
+        return key
+
     def modify_game_id(self, game_id, sport_name):
         prefix = Mapping.game_id_prefix.get(sport_name, '')
         return f'{prefix}{game_id}'
-    
+
     def get_live_time(self, live_period, time_str):
         if live_period:
             live_period = int(live_period)
@@ -661,20 +772,20 @@ class TXCrawler:
         elif live_period == TX.Value.LivePeriod.INTERMISSION.value:
             return Mapping.live_time_prefix[TX.Value.LivePeriod.INTERMISSION]
         return '0'
-    
+
     def add_league_postfix(self, league_names, sport_name, event_json):
         if sport_name in ('網球', '排球', '乒乓球'):
-            if league_names[0] == event_json.get("s_FilterAllianceName"):
+            if league_names[0] == event_json.get("s_FilterAllianceName") and sport_name != '電子競技':
                 league_names[0] += '-局數獲勝者'
                 league_names[1] += '-局数获胜者'
                 league_names[2] += '-Game Handicap'
             else:
                 league_names[0] = event_json.get("s_FilterAllianceName", '')
                 postfix = event_json.get('s_FilterAllianceName').split('-')[-1]
-                postfix_mapping = league_names[postfix]
+                postfix_mapping = Mapping.league_postfix[postfix]
                 league_names[1] += postfix_mapping['cn']
                 league_names[2] += postfix_mapping['en']
-    
+
     def get_correct_teams(self, league_name, team_a, team_b, team_order):
         # 總得分玩法將隊伍對調，顯示才正常
         # 網球隊伍對調
@@ -686,7 +797,7 @@ class TXCrawler:
         if not reverse_team or self.task_spec['game_type'] not in (GameType.baseball.value, GameType.basketball.value):
             return team_a_names, team_b_names
         return team_b_names, team_a_names
-                    
+
     @staticmethod
     def game_class_convert(game_type, league):
         """Specify game class based on game type and league name"""
@@ -720,7 +831,7 @@ class TXCrawler:
         else:
             game_class = GameType.other
         return game_class.value
-    
+
     def extract_spread(self, event_json, period):
         spread_line = '-0'
         advanced_team = 1
@@ -786,19 +897,21 @@ class TXCrawler:
                 return f'{int(spread_line_num)}+0'
             return str(spread_line_num)
         return f'{spread_line_num-0.25}/{spread_line_num+0.25}'
-    
+
     def _compute_other_line(self, line, value):
         if '.5' in line:
             return line
         return f'{line}{value}'
-    
+
     def _line_add_sign(self, line, advanced_team):
         if line == '-0':
             return line, '+0'
         if advanced_team == TX.Value.AdvancedTeam.HOME.value:
             return f'-{line}', f'+{line}'
+        if '-' in line[0]:
+            return line, f'+{line[1:]}'
         return f'+{line}', f'-{line}'
-    
+
     def extract_total(self, event_json, period):
         total_line = '0'
         over = '0'
@@ -836,7 +949,7 @@ class TXCrawler:
             over=str(over),
             under=str(under)
         )
-    
+
     def extract_money_line(self, event_json, period):
         if period is Period.FULL:
             return protobuf_spec.onetwo(
@@ -849,7 +962,7 @@ class TXCrawler:
                 away=str(event_json.get(TX.Key.MONEY_LINE_AWAY, 0))
             ), event_json.get(TX.Key.MONEY_LINE_DRAW, '0')
         return protobuf_spec.onetwo(), ''
-    
+
     def extract_esre(self, event_json, period):
         advanced_team = protobuf_spec.whichTeam.home
         if period is Period.FULL:
@@ -888,38 +1001,100 @@ class TXCrawler:
                     away=even
                 )
         return protobuf_spec.onetwo(home='0', away='0')
-    
-    def extract_basketball_special_handicap(self, event_json, game_type_id):
-        if game_type_id == 10:
-            # 搶首
-            first_goal = protobuf_spec.twZF(
-                homeZF=protobuf_spec.typeZF(
-                    line='',
-                    odds=event_json[TX.Key.FIRST_GOAL_HOME],
-                ),
-                awayZF=protobuf_spec.typeZF(
-                    line='',
-                    odds=event_json[TX.Key.FIRST_GOAL_AWAY]
-                )
-            )
-            # 搶尾
-            last_goal = protobuf_spec.typeDS(
+
+    def extract_basketball_special_handicap(self, event_json):
+        # 搶首
+        first_goal = protobuf_spec.twZF(
+            homeZF=protobuf_spec.typeZF(
                 line='',
-                over=event_json[TX.Key.LAST_GOAL_HOME],
-                under=event_json[TX.Key.LAST_GOAL_AWAY]
+                odds=str(event_json[TX.Key.FIRST_GOAL_HOME]),
+            ),
+            awayZF=protobuf_spec.typeZF(
+                line='',
+                odds=str(event_json[TX.Key.FIRST_GOAL_AWAY])
             )
-            # 單節最高分
-            single_set_highest = protobuf_spec.onetwo(
-                home=event_json[TX.Key.SINGLE_SET_HIGHEST_SCORE_HOME],
-                away=event_json[TX.Key.SINGLE_SET_HIGHEST_SCORE_AWAY]
-            )
-            return first_goal, last_goal, single_set_highest
-        return protobuf_spec.twZF(), protobuf_spec.typeDS(), protobuf_spec.onetwo()
-    
+        )
+        # 搶尾
+        last_goal = protobuf_spec.typeDS(
+            line='',
+            over=str(event_json[TX.Key.LAST_GOAL_HOME]),
+            under=str(event_json[TX.Key.LAST_GOAL_AWAY])
+        )
+        # 單節最高分
+        single_set_highest = protobuf_spec.onetwo(
+            home=str(event_json[TX.Key.SINGLE_SET_HIGHEST_SCORE_HOME]),
+            away=str(event_json[TX.Key.SINGLE_SET_HIGHEST_SCORE_AWAY])
+        )
+        return first_goal, last_goal, single_set_highest
+
+    def extract_correct_score(self, event_json):
+        correct_score = {f'{home}-{away}': '0' for home, away in product([0, 1, 2, 3, 4], repeat=2)}
+        if event_json.get(TX.Key.CORRECT_SCORE_1_0) is not None:
+            correct_score['1-0'] = str(event_json[TX.Key.CORRECT_SCORE_1_0])
+            correct_score['2-0'] = str(event_json[TX.Key.CORRECT_SCORE_2_0])
+            correct_score['2-1'] = str(event_json[TX.Key.CORRECT_SCORE_2_1])
+            correct_score['3-0'] = str(event_json[TX.Key.CORRECT_SCORE_3_0])
+            correct_score['3-1'] = str(event_json[TX.Key.CORRECT_SCORE_3_1])
+            correct_score['3-2'] = str(event_json[TX.Key.CORRECT_SCORE_3_2])
+            correct_score['4-0'] = str(event_json[TX.Key.CORRECT_SCORE_4_0])
+            correct_score['4-1'] = str(event_json[TX.Key.CORRECT_SCORE_4_1])
+            correct_score['4-2'] = str(event_json[TX.Key.CORRECT_SCORE_4_2])
+            correct_score['4-3'] = str(event_json[TX.Key.CORRECT_SCORE_4_3])
+            correct_score['0-1'] = str(event_json[TX.Key.CORRECT_SCORE_0_1])
+            correct_score['0-2'] = str(event_json[TX.Key.CORRECT_SCORE_0_2])
+            correct_score['1-2'] = str(event_json[TX.Key.CORRECT_SCORE_1_2])
+            correct_score['0-3'] = str(event_json[TX.Key.CORRECT_SCORE_0_3])
+            correct_score['1-3'] = str(event_json[TX.Key.CORRECT_SCORE_1_3])
+            correct_score['2-3'] = str(event_json[TX.Key.CORRECT_SCORE_2_3])
+            correct_score['0-4'] = str(event_json[TX.Key.CORRECT_SCORE_0_4])
+            correct_score['1-4'] = str(event_json[TX.Key.CORRECT_SCORE_1_4])
+            correct_score['2-4'] = str(event_json[TX.Key.CORRECT_SCORE_2_4])
+            correct_score['3-4'] = str(event_json[TX.Key.CORRECT_SCORE_3_4])
+            correct_score['0-0'] = str(event_json[TX.Key.CORRECT_SCORE_0_0])
+            correct_score['1-1'] = str(event_json[TX.Key.CORRECT_SCORE_1_1])
+            correct_score['2-2'] = str(event_json[TX.Key.CORRECT_SCORE_2_2])
+            correct_score['3-3'] = str(event_json[TX.Key.CORRECT_SCORE_3_3])
+            correct_score['4-4'] = str(event_json[TX.Key.CORRECT_SCORE_4_4])
+            correct_score['other'] = str(event_json[TX.Key.CORRECT_SCORE_OTHER])
+        return json.dumps(correct_score)
+
+    def extract_half_full_score(self, event_json):
+        half_full_score = {f'{first}{full}': '0' for first, full in product(['H', 'D', 'A'], repeat=2)}
+        if event_json.get(TX.Key.HALF_FULL_SCORE_HH) is not None:
+            half_full_score['HH'] = str(event_json[TX.Key.HALF_FULL_SCORE_HH])
+            half_full_score['HD'] = str(event_json[TX.Key.HALF_FULL_SCORE_HD])
+            half_full_score['HA'] = str(event_json[TX.Key.HALF_FULL_SCORE_HA])
+            half_full_score['DH'] = str(event_json[TX.Key.HALF_FULL_SCORE_DH])
+            half_full_score['DD'] = str(event_json[TX.Key.HALF_FULL_SCORE_DD])
+            half_full_score['DA'] = str(event_json[TX.Key.HALF_FULL_SCORE_DA])
+            half_full_score['AH'] = str(event_json[TX.Key.HALF_FULL_SCORE_AH])
+            half_full_score['AD'] = str(event_json[TX.Key.HALF_FULL_SCORE_AD])
+            half_full_score['AA'] = str(event_json[TX.Key.HALF_FULL_SCORE_AA])
+        return json.dumps(half_full_score)
+
+    def extract_score_sum(self, event_json, period):
+        score_sum = {
+            '0-1': '0',
+            '2-3': '0',
+            '4-6': '0',
+            '7+': '0',
+        }
+        if period is Period.FULL:
+            score_sum['0-1'] = str(event_json[TX.Key.SCORE_SUM_0_1])
+            score_sum['2-3'] = str(event_json[TX.Key.SCORE_SUM_2_3])
+            score_sum['4-6'] = str(event_json[TX.Key.SCORE_SUM_4_6])
+            score_sum['7+'] = str(event_json[TX.Key.SCORE_SUM_7_ABOVE])
+        elif period is Period.FIRST_HALF:
+            score_sum['0-1'] = str(event_json[TX.Key.SCORE_SUM_1ST_0_1])
+            score_sum['2-3'] = str(event_json[TX.Key.SCORE_SUM_1ST_2_3])
+            score_sum['4-6'] = str(event_json[TX.Key.SCORE_SUM_1ST_4_6])
+            score_sum['7+'] = str(event_json[TX.Key.SCORE_SUM_1ST_7_ABOVE])
+        return json.dumps(score_sum)
+
     def convert_game_type(self, event_json):
         # 九州資料對照轉成賽事玩法 如：全場．上半場
-        scene = int(event_json[TX.Key.FULL])
-        kzdp = int(event_json[TX.Key.KZDP])
+        scene = int(event_json[TX.Key.FULL_1ST_TYPE])
+        kzdp = int(event_json[TX.Key.LIVE_TYPE])
         game_type_id = 99
         if scene == 11:
             game_type_id = 3
@@ -946,7 +1121,7 @@ class TXCrawler:
             elif scene == 8:
                 game_type_id = 10
         return game_type_id
-    
+
     def reverse_odds(self, spread, money_line, esre):
         # 讓分
         tmp_line = spread.homeZF.line

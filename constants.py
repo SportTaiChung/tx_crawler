@@ -32,7 +32,9 @@ class GameType(Enum):
     eSport = 'eSport'
     soccer = 'soccer'
     UCL = 'UCL'  # 歐洲冠軍足球
-    other = 'ohter'
+    pingpong = 'other'
+    volleyball = 'other'
+    other = 'other'
 
 
 class GameCategory(Enum):
@@ -88,9 +90,13 @@ class TX:
         CATEGORY_DATA = 'gameData'
         CATEGORY_ID = 'Typid'
         EVENT_LIST = 'BallData'
+        CORRECT_SCORE_EVENT_LIST = 'CorrectScore'
+        HALF_FULL_SCORE_EVENT_LIST = 'HalfTheAudience'
+        SCORE_SUM_EVENT_LIST = 'Goals'
         ERROR_MESSAGE = 'ErrorString'
         EMPTY_EVENT_LIST = 'NoRefData'
         TOTAL_PAGE_NUM = 'PageTotalRecords'
+        TOTAL_EVENT_COUNT = 'Count'
         # event keys
         EVENT_SPORT_TYPE = 's_BallSx'
         EVENT_SPORT_NAME = 's_BallName'
@@ -103,6 +109,8 @@ class TX:
         TEAM_A = 's_TeamA'
         TEAM_B = 's_TeamB'
         EVENT_ID = 's_ZbMatchID'
+        EVENT_ID_GP = 's_GPID'
+        EVENT_ID_1 = 's_ID_1'
         EVENT_SCORE_HOME = 's_RZJZF'
         EVENT_SCORE_AWAY = 's_RYJZF'
         EVENT_RED_CARD_HOME = 'i_RedCardA_1'
@@ -149,8 +157,8 @@ class TX:
         PARITY_1ST_ODD = 'dbl_DS_D_PL_2'
         PARITY_1ST_EVEN = 'dbl_DS_S_PL_2'
         # 額外盤口
-        FULL = 's_Scene_1'
-        KZDP = 's_Kzdp'
+        FULL_1ST_TYPE = 's_Scene_1'
+        LIVE_TYPE = 's_Kzdp'
         SECOND_HALF = 's_Scene_2'
         # 搶首
         FIRST_GOAL_HOME = 'dbl_QSF_Z_PL_1'
@@ -161,6 +169,58 @@ class TX:
         # 單節最高分
         SINGLE_SET_HIGHEST_SCORE_HOME = 'dbl_DJZG_Z_PL_1'
         SINGLE_SET_HIGHEST_SCORE_AWAY = 'dbl_DJZG_Y_PL_1'
+        # 波膽
+        # 主隊
+        CORRECT_SCORE_1_0 = 's_Z10'
+        CORRECT_SCORE_2_0 = 's_Z20'
+        CORRECT_SCORE_2_1 = 's_Z21'
+        CORRECT_SCORE_3_0 = 's_Z30'
+        CORRECT_SCORE_3_1 = 's_Z31'
+        CORRECT_SCORE_3_2 = 's_Z32'
+        CORRECT_SCORE_4_0 = 's_Z40'
+        CORRECT_SCORE_4_1 = 's_Z41'
+        CORRECT_SCORE_4_2 = 's_Z42'
+        CORRECT_SCORE_4_3 = 's_Z43'
+        # 客隊
+        CORRECT_SCORE_0_1 = 's_K10'
+        CORRECT_SCORE_0_2 = 's_K20'
+        CORRECT_SCORE_1_2 = 's_K21'
+        CORRECT_SCORE_0_3 = 's_K30'
+        CORRECT_SCORE_1_3 = 's_K31'
+        CORRECT_SCORE_2_3 = 's_K32'
+        CORRECT_SCORE_0_4 = 's_K40'
+        CORRECT_SCORE_1_4 = 's_K41'
+        CORRECT_SCORE_2_4 = 's_K42'
+        CORRECT_SCORE_3_4 = 's_K43'
+        # 和局
+        CORRECT_SCORE_0_0 = 's_Z00'
+        CORRECT_SCORE_1_1 = 's_Z11'
+        CORRECT_SCORE_2_2 = 's_Z22'
+        CORRECT_SCORE_3_3 = 's_Z33'
+        CORRECT_SCORE_4_4 = 's_Z44'
+        # 其他
+        CORRECT_SCORE_OTHER = 's_Z55'
+        # 半全場
+        # 主隊(H/Z) 和局(D/H) 客(A/K)
+        HALF_FULL_SCORE_HH = 's_BDZZ'
+        HALF_FULL_SCORE_HD = 's_BDZH'
+        HALF_FULL_SCORE_HA = 's_BDZK'
+        HALF_FULL_SCORE_DH = 's_BDHZ'
+        HALF_FULL_SCORE_DD = 's_BDHH'
+        HALF_FULL_SCORE_DA = 's_BDHK'
+        HALF_FULL_SCORE_AH = 's_BDKZ'
+        HALF_FULL_SCORE_AD = 's_BDKH'
+        HALF_FULL_SCORE_AA = 's_BDKK'
+        # 入球數
+        SCORE_SUM_0_1 = 's_RQS_01_1'
+        SCORE_SUM_2_3 = 's_RQS_23_1'
+        SCORE_SUM_4_6 = 's_RQS_46_1'
+        SCORE_SUM_7_ABOVE = 's_RQS_7_1'
+        SCORE_SUM_1ST_0_1 = 's_RQS_01_2'
+        SCORE_SUM_1ST_2_3 = 's_RQS_23_2'
+        SCORE_SUM_1ST_4_6 = 's_RQS_46_2'
+        SCORE_SUM_1ST_7_ABOVE = 's_RQS_7_2'
+
 
     class Pos:
         class Lang:
@@ -195,6 +255,9 @@ class TX:
         class BallType(Enum):
             EUROPE_FIVE_SOCCER_LEAGUE = ''
             SOCCER = 'b_zq'
+            SOCCER_CORRECT_SCORE = '4'
+            SOCCER_SCORE_SUM = '5'
+            SOCCER_FIRST_HALF_RESULT = '6'
             BASEBALL = 'b_bangq'
             BASKETBALL = 'b_lq'
             TENNIS = 'b_wq'
@@ -202,12 +265,22 @@ class TX:
             VOLLEYBALL = 'b_pq'
             HANDBALL = 'b_sq'
             POOL = 'b_zhuangq'  # 撞球
-            TABLE_TENNIS = 'b_ppq'
+            PINGPONG = 'b_ppq'
             BADMINTON = 'b_ymq'
             E_SPORT = 'b_dzjj'
 
             @staticmethod
-            def get_ball_type(game_type):
+            def get_ball_type(game_type, category):
+                if category == 'pd':
+                    return TX.Value.BallType.SOCCER_CORRECT_SCORE
+                elif category == 'tg':
+                    return TX.Value.BallType.SOCCER_SCORE_SUM
+                elif category == 'hf':
+                    return TX.Value.BallType.SOCCER_FIRST_HALF_RESULT
+                elif game_type == 'pingpong':
+                    return TX.Value.BallType.PINGPONG
+                elif game_type == 'volleyball':
+                    return TX.Value.BallType.VOLLEYBALL
                 return Mapping.ball_type[GameType[game_type]]
 
             def get_id(self):
@@ -223,7 +296,7 @@ class TX:
             VOLLEYBALL = '234'
             HANDBALL = '236'
             POOL = '237'  # 撞球
-            TABLE_TENNIS = '235'
+            PINGPONG = '235'
             BADMINTON = '233'
             E_SPORT = '238'
 
@@ -242,6 +315,10 @@ class TX:
             FULL_FIRST_HALF = '11'  # 單式，全場、上半場
             SET = '12'  # 單節
             TEAM_TOTAL = '15'
+            PINGPONG_VOLLEYBALL_SET = '20'
+            TENNIS_SET = '21'
+            FIRST_BLOOD = '22'
+            KILL_HERO = '23'
             FIRST_LAST_POINT = '24'  # 首尾分
 
             @staticmethod
@@ -290,11 +367,16 @@ class Mapping:
         GameType.baseball: TX.Value.BallType.BASEBALL,
         GameType.tennis: TX.Value.BallType.TENNIS,
         GameType.hockey: TX.Value.BallType.HOCKEY,
-        GameType.eSport: TX.Value.BallType.E_SPORT
+        GameType.eSport: TX.Value.BallType.E_SPORT,
+        GameType.pingpong: TX.Value.BallType.PINGPONG,
+        GameType.volleyball: TX.Value.BallType.VOLLEYBALL
     }
     ball_type_id = {
         TX.Value.BallType.EUROPE_FIVE_SOCCER_LEAGUE: TX.Value.BallTypeID.EUROPE_FIVE_SOCCER_LEAGUE,
         TX.Value.BallType.SOCCER: TX.Value.BallTypeID.SOCCER,
+        TX.Value.BallType.SOCCER_CORRECT_SCORE: TX.Value.BallTypeID.SOCCER,
+        TX.Value.BallType.SOCCER_SCORE_SUM: TX.Value.BallTypeID.SOCCER,
+        TX.Value.BallType.SOCCER_FIRST_HALF_RESULT: TX.Value.BallTypeID.SOCCER,
         TX.Value.BallType.BASEBALL: TX.Value.BallTypeID.BASEBALL,
         TX.Value.BallType.BASKETBALL: TX.Value.BallTypeID.BASKETBALL,
         TX.Value.BallType.TENNIS: TX.Value.BallTypeID.TENNIS,
@@ -302,7 +384,7 @@ class Mapping:
         TX.Value.BallType.VOLLEYBALL: TX.Value.BallTypeID.VOLLEYBALL,
         TX.Value.BallType.HANDBALL: TX.Value.BallTypeID.HANDBALL,
         TX.Value.BallType.POOL: TX.Value.BallTypeID.POOL,  # 撞球
-        TX.Value.BallType.TABLE_TENNIS: TX.Value.BallTypeID.TABLE_TENNIS,
+        TX.Value.BallType.PINGPONG: TX.Value.BallTypeID.PINGPONG,
         TX.Value.BallType.BADMINTON: TX.Value.BallTypeID.BADMINTON,
         TX.Value.BallType.E_SPORT: TX.Value.BallTypeID.E_SPORT
     }
@@ -316,7 +398,7 @@ class Mapping:
         'volleyball': TX.Value.SportType.OTHER,
         'handball': TX.Value.SportType.OTHER,
         'pool': TX.Value.SportType.OTHER,  # 撞球
-        'table_tennis': TX.Value.SportType.OTHER,
+        'pingpong': TX.Value.SportType.OTHER,
         'badminton': TX.Value.SportType.OTHER,
         'eSport': TX.Value.SportType.OTHER,
         'soccer_olympic': TX.Value.SportType.SOCCER_OLYMPIC # 足球奧運
@@ -331,8 +413,12 @@ class Mapping:
         '15min': TX.Value.Scene.SPECIAL_15_MIN,  # 特定15分
         'full': TX.Value.Scene.FULL_FIRST_HALF,  # 單式，全場、上半場
         'set': TX.Value.Scene.SET,  # 單節
+        'tennis_set': TX.Value.Scene.TENNIS_SET,
+        'pingpong_volleyball_set': TX.Value.Scene.PINGPONG_VOLLEYBALL_SET,
         'team total': TX.Value.Scene.TEAM_TOTAL,
-        'first_last_point': TX.Value.Scene.FIRST_LAST_POINT  # 首尾分
+        'first_last_point': TX.Value.Scene.FIRST_LAST_POINT,  # 首尾分
+        'first_blood': TX.Value.Scene.FIRST_BLOOD,
+        'kill_hero': TX.Value.Scene.KILL_HERO
     }
     category_id = {
         'all': TX.Value.CategoryID.ALL,
@@ -382,32 +468,69 @@ class Mapping:
         },
         # 排球&乒乓球
         '第一局': {
-            'cn': '第一局',
+            'cn': '-第一局',
             'en': '-1st Set'
         },
         '第二局': {
-            'cn': '第二局',
+            'cn': '-第二局',
             'en': '-2nd Set'
         },
         '第三局': {
-            'cn': '第三局',
+            'cn': '-第三局',
             'en': '-3rd Set'
         },
         '第四局': {
-            'cn': '第四局',
+            'cn': '-第四局',
             'en': '-4st Set'
         },
         '第五局': {
-            'cn': '第五局',
+            'cn': '-第五局',
             'en': '-5nd Set'
         },
         '第六局': {
-            'cn': '第六局',
+            'cn': '-第六局',
             'en': '-6rd Set'
         },
         '第七局': {
-            'cn': '第七局',
+            'cn': '-第七局',
             'en': '-7rd Set'
+        },
+        # 電競
+        '擊殺英雄總數(第一局)': {
+            'cn': '-击杀英雄总数(第一局)',
+            'en': '-TOTAL KILL THE HERO (1st SET)'
+        },
+        '擊殺英雄總數(第二局)': {
+            'cn': '-击杀英雄总数(第二局)',
+            'en': '-TOTAL KILL THE HERO (2nd SET)'
+        },
+        '擊殺英雄總數(第三局)': {
+            'cn': '-击杀英雄总数(第三局)',
+            'en': '-TOTAL KILL THE HERO (3rd SET)'
+        },
+        '獲得第一滴血(第一局)': {
+            'cn': '-获得第一滴血(第一局)',
+            'en': '-DRAW FIRST BLOOD (1st SET)'
+        },
+        '獲得第一滴血(第一局)': {
+            'cn': '-获得第一滴血(第二局)',
+            'en': '-DRAW FIRST BLOOD (2nd SET)'
+        },
+        '獲得第一滴血(第三局)': {
+            'cn': '-获得第一滴血(第三局)',
+            'en': '-DRAW FIRST BLOOD (3rd SET)'
+        },
+        '對戰時間(第一局)': {
+            'cn': '-对战时间(第一局)',
+            'en': '-DURATION (1st SET)'
+        },
+        '對戰時間(第二局)': {
+            'cn': '-对战时间(第二局)',
+            'en': '-DURATION (2nd SET)'
+        },
+        '對戰時間(第三局)': {
+            'cn': '-对战时间(第三局)',
+            'en': '-DURATION (3rd SET)'
         }
     }
     game_id_prefix = {
@@ -417,11 +540,14 @@ class Mapping:
     }
     exchange_name = {
         'soccer': 'TX_SC',
+        'soccer_pd': 'TX_SC_PD',
         'baseball': 'TX_BS',
         'basketball': 'TX_BK',
         'tennis': 'TX_TN',
         'hockey': 'TX_HC',
         'football': 'TX_FB',
+        'pingpong': 'TX_PP',
+        'volleyball': 'TX_VL',
         'eSport': 'TX_ES'
     }
     live_time_prefix = {
@@ -429,4 +555,9 @@ class Mapping:
         TX.Value.LivePeriod.FIRST_HALF: '上',
         TX.Value.LivePeriod.SECOND_HALF: '下',
         TX.Value.LivePeriod.INTERMISSION: '中場'
+    }
+    event_list_key = {
+        'pd': TX.Key.CORRECT_SCORE_EVENT_LIST,
+        'tg': TX.Key.SCORE_SUM_EVENT_LIST,
+        'hf': TX.Key.HALF_FULL_SCORE_EVENT_LIST
     }
