@@ -16,6 +16,7 @@ from time import time
 from math import floor, hypot
 from copy import deepcopy
 from hashlib import md5
+import hmac
 import urllib.parse
 import base64
 import xxtea
@@ -209,7 +210,8 @@ class TXCrawler:
     async def login(self, session, success_domains, account, password):
         form = {
             'txtUser': account,
-            'txtPassword': password
+            'txtPassword': self.password_hash(password),
+            'screenSize': '1920*1080'
         }
         random.shuffle(success_domains)
         for domain in success_domains:
@@ -234,6 +236,10 @@ class TXCrawler:
                                 return True
                             elif data.get('StatusCode') == 404:
                                 await self.logger.warning(f'登入 {domain} 失敗，原因: 鎖區，狀態碼: {login_resp.status}，回應: {body}')
+                            elif '帳號或密碼錯誤' in data.get('msg', ''):
+                                await self.logger.warning(f'登入 {domain} 失敗，原因: 帳密錯誤或是帳號被封，狀態碼: {login_resp.status}，回應: {body}')
+                            else:
+                                await self.logger.warning(f'登入 {domain} 失敗，狀態碼: {login_resp.status}，回應: {body}')
                         except (json.decoder.JSONDecodeError, TypeError, KeyError):
                             await self.logger.warning(f'登入 {domain} 失敗，回應: {body}')
                     elif login_resp.status == 599:
@@ -244,6 +250,11 @@ class TXCrawler:
                 await self.logger.warning(f'登入 {domain} 失敗，原因: 無法連上首頁，狀態碼: {home_resp.status}，回應: {await home_resp.text()}')
         await self.logger.warning(f'登入 {success_domains} 都失敗')
         return False
+    
+    def password_hash(self, password):
+        md5_hash = md5(password.encode('utf-8')).hexdigest()
+        hmac_md5_hash = hmac.new(md5_hash.encode('utf-8'), password.encode('utf-8'), md5)
+        return hmac_md5_hash.hexdigest()
 
     async def logout(self, session):
         form = {
@@ -1156,7 +1167,10 @@ class TXCrawler:
             bulk.aphdc.extend(handicaps)
             protobuf_data = bulk.SerializeToString()
             try:
-                exchange_name = Mapping.exchange_name[self.task_spec['game_type']]
+                game_type = self.task_spec['game_type']
+                if self.task_spec['category'] == 'pd':
+                    game_type = f'{game_type}_pd'
+                exchange_name = Mapping.exchange_name[game_type]
                 exchange = await self.mq_channel.get_exchange(exchange_name)
                 exchange.publish(protobuf_data)
             except (aio_pika.AMQPException, asyncio.TimeoutError) as err:

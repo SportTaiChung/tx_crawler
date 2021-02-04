@@ -15,7 +15,7 @@ leo_domains:
   - https://www.fa77.net
 
 api_path:
-  login: LoadData/Pb.ashx
+  login: LoadData/Pd.ashx
   logout: LoadData/End.ashx
   redirect_selection : Platform/LoginBallPlatform.aspx?gamenum=1&isphone=0
   availalbe_redirect_sites : LoadData/AutoLines.ashx
