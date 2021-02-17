@@ -215,7 +215,7 @@ class TXCrawler:
         }
         random.shuffle(success_domains)
         for domain in success_domains:
-            home_resp = await session.get(f'{domain}', headers=self._config['login_headers'])
+            home_resp = await session.get(f'{domain}/Index.aspx', headers=self._config['login_headers'])
             if home_resp.status == 200:
                 async with session.post(
                         f'{domain}/{self._config["api_path"]["login"]}',
