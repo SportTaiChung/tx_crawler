@@ -117,7 +117,7 @@ class TXCrawler:
         self.logger = self._logger_factory
         sessions = []
         if not self._config['read_from_file']:
-            # await self.init_mq()
+            await self.init_mq()
             if self._config['debug'] and os.path.exists('saved_cookies.pickle'):
                 with open('saved_cookies.pickle', 'rb') as session_file:
                     cookies = pickle.load(session_file, pickle.HIGHEST_PROTOCOL)
@@ -151,7 +151,7 @@ class TXCrawler:
             if self._config['dump']:
                 with open(f'{self.name}.bin', mode='wb') as f:
                     f.write(data.SerializeToString())
-            # await self.upload_data(data)
+            await self.upload_data(data)
             total_execution_time = (datetime.now() - self.last_execution_time).total_seconds()
             await self.logger.info('任務結束', extra={'step': 'total', 'total_process_time': total_execution_time, 'execution_id': self.execution_id})
             if not self.task_failed:
