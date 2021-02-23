@@ -178,7 +178,7 @@ class TXCrawler:
 
     async def build_mq_connection_pool(self):
         async def connect_mq():
-            return await aio_pika.connect_robust(self._mq_url)
+            return await aio_pika.connect_robust(self._config['rabbitmqUrl'])
 
         self.mq_connection_pool = aio_pika.pool.Pool(connect_mq, max_size=2)
 
