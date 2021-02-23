@@ -1244,11 +1244,12 @@ class TXCrawler:
                 if self.task_spec['category'] == 'pd':
                     game_type = f'{game_type}_pd'
                 exchange_name = Mapping.exchange_name[game_type]
-                exchange = await self.mq_channel.get_exchange(exchange_name)
-                exchange.publish(
-                    routing_key='',
-                    message=aio_pika.Message(body=protobuf_data)
-                )
+                async with self.mq_channel_pool.acquire() as channel:
+                    exchange = await channel.get_exchange(exchange_name)
+                    exchange.publish(
+                        routing_key='',
+                        message=aio_pika.Message(body=protobuf_data)
+                    )
             except (aio_pika.AMQPException, asyncio.TimeoutError) as err:
                 await self.logger.warning('上傳protobuf資料到賠率轉換API發生連線問題: %s' % str(err), extra={'step': 'upload'})
                 succeed = False
