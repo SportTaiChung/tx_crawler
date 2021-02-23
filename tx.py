@@ -74,8 +74,8 @@ class TXCrawler:
         self.logger = None
         self._logger_factory = None
         self.step_log_json = {}
-        self.mq_session = None
-        self.mq_channel = None
+        self.mq_connection_pool = None
+        self.mq_channel_pool = None
         self.logined_sessions = []
         self.execution_id = None
         self.last_execution_time = datetime.now()
@@ -169,8 +169,25 @@ class TXCrawler:
         await self.logger.info('停止爬蟲')
 
     async def init_mq(self):
-        self.mq_session = await aio_pika.connect_robust(self._config['rabbitmqUrl'])
-        self.mq_channel = await self.mq_session.channel()
+        if self.mq_connection_pool and not self.mq_connection_pool.is_closed:
+            await self.mq_connection_pool.close()
+        await self.build_mq_connection_pool()
+        if self.mq_channel_pool and not self.mq_channel_pool.is_closed:
+            await self.mq_channel_pool.close()
+        await self.build_channel_pool()
+
+    async def build_mq_connection_pool(self):
+        async def connect_mq():
+            return await aio_pika.connect_robust(self._mq_url)
+
+        self.mq_connection_pool = aio_pika.pool.Pool(connect_mq, max_size=2)
+
+    async def build_channel_pool(self):
+        async def create_channel():
+            async with self.mq_connection_pool.acquire() as connection:
+                return await connection.channel()
+
+        self.mq_channel_pool = aio_pika.pool.Pool(create_channel, max_size=1)
 
     async def init_session(self, cookies=None):
         sessions = []
@@ -1228,7 +1245,10 @@ class TXCrawler:
                     game_type = f'{game_type}_pd'
                 exchange_name = Mapping.exchange_name[game_type]
                 exchange = await self.mq_channel.get_exchange(exchange_name)
-                exchange.publish(protobuf_data)
+                exchange.publish(
+                    routing_key='',
+                    message=aio_pika.Message(body=protobuf_data)
+                )
             except (aio_pika.AMQPException, asyncio.TimeoutError) as err:
                 await self.logger.warning('上傳protobuf資料到賠率轉換API發生連線問題: %s' % str(err), extra={'step': 'upload'})
                 succeed = False
