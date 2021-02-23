@@ -1,8 +1,5 @@
 # coding: utf-8
 from enum import Enum
-from http.cookies import BaseCookie
-
-from attr import validate
 
 
 DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36 Edg/87.0.664.75'
@@ -20,10 +17,10 @@ class Site(Enum):
 class GameType(Enum):
     # baseball not used in protobuf game class
     baseball = 'baseball'
-    mlb = 'mlb'  # 美棒
-    npb = 'npb'  # 日棒
-    cpbl = 'cpbl'# 台棒
-    kbo = 'kbo'  # 韓棒和其他
+    mlb = 'mlb'    # 美棒
+    npb = 'npb'    # 日棒
+    cpbl = 'cpbl'  # 台棒
+    kbo = 'kbo'    # 韓棒和其他
     basketball = 'basketball'  # NBA
     otherbasketball = 'otherbasketball'  # 其他非NBA籃球
     tennis = 'tennis'
@@ -220,7 +217,10 @@ class TX:
         SCORE_SUM_1ST_2_3 = 's_RQS_23_2'
         SCORE_SUM_1ST_4_6 = 's_RQS_46_2'
         SCORE_SUM_1ST_7_ABOVE = 's_RQS_7_2'
-
+        # alert
+        ALERT_TYPE = 'alertType'
+        LOGOUT_TYPE_ID = 'strLogOutType'
+        IS_LOGOUT = 'isKict'
 
     class Pos:
         class Lang:
@@ -229,7 +229,7 @@ class TX:
             ENGLISH = 2
             VIETNAMESE = 3
             THAI = 4
-        
+
         class Encryption:
             DATA = 0
             INFO = 1
@@ -237,7 +237,12 @@ class TX:
             HASH_KEY = 3
 
     class Value:
+        LOGOUT_TYPE = 'backLogOutPage'
+        LOGOUT_ALERT_IDS = ['3', '4', '6', '7', '9', '11', '12', '14', '15', '']
+        BANNED_ALERT_IDS = ['1', '2', '5', '8', '13']
+        SITE_MAINTAIN_ALERT_ID = '10'
         WORLD_CUP = 4
+
         class SportType(Enum):
             EUROPE_FIVE_SOCCER_LEAGUE = 'wdls'
             SOCCER = 'zq'
@@ -251,7 +256,7 @@ class TX:
             @staticmethod
             def get_sport_type(game_type):
                 return Mapping.sport_type[game_type]
-                    
+
         class BallType(Enum):
             EUROPE_FIVE_SOCCER_LEAGUE = ''
             SOCCER = 'b_zq'
@@ -285,7 +290,7 @@ class TX:
 
             def get_id(self):
                 return Mapping.ball_type_id[self]
-        
+
         class BallTypeID(Enum):
             EUROPE_FIVE_SOCCER_LEAGUE = 'wdls'
             SOCCER = '10'
@@ -303,7 +308,7 @@ class TX:
         class SortType(Enum):
             TIME_SORT = 'timesort'
             HOT_SORT = 'hotsort'
-        
+
         class Scene(Enum):
             ALL_CATEGORY = 'gameall_country'
             ALL = 'all'
@@ -324,7 +329,7 @@ class TX:
             @staticmethod
             def get_scene(play_type):
                 return Mapping.scene.get(play_type, TX.Value.Scene.ALL_CATEGORY)
-        
+
         class CategoryID(Enum):
             ALL = '0'
             SOCCER_ALL = '10'
@@ -348,11 +353,11 @@ class TX:
             @staticmethod
             def get_id(play_type):
                 return Mapping.category_id.get(play_type, TX.Value.CategoryID.ALL)
-            
+
         class AdvancedTeam(Enum):
             HOME = 1
             AWAY = 0
-        
+
         class LivePeriod(Enum):
             NOT_START = 0
             FIRST_HALF = 1
@@ -361,6 +366,25 @@ class TX:
 
 
 class Mapping:
+    logout_code = {
+        '1': '您的帳號存在異常！',
+        '2': '您的操作過於頻繁！',
+        '3': '系統檢測到異常，請重新訪問！',
+        '4': '您的帳號已登出！',
+        '5': '訪問受限！',
+        '6': '資料讀取失敗！',
+        '7': '偵測到重複登入，已將您登出',
+        '您被強迫下線，您的帳戶在其它位置登入！'
+        '8': '登入帳號異常！',
+        '9': '網路異常，資料讀取失敗！',
+        '10': '系統升級中，請稍候重進……',
+        '11': '系統檢測到異常，請重新訪問！',
+        '12': '網絡異常！',
+        '13': '您的帳號已被鎖定',
+        '14': '您已登出！',
+        '15': '資料讀取失敗！',
+        '': '您已登出！'
+    }
     ball_type = {
         GameType.soccer: TX.Value.BallType.SOCCER,
         GameType.basketball: TX.Value.BallType.BASKETBALL,
@@ -401,7 +425,7 @@ class Mapping:
         'pingpong': TX.Value.SportType.OTHER,
         'badminton': TX.Value.SportType.OTHER,
         'eSport': TX.Value.SportType.OTHER,
-        'soccer_olympic': TX.Value.SportType.SOCCER_OLYMPIC # 足球奧運
+        'soccer_olympic': TX.Value.SportType.SOCCER_OLYMPIC  # 足球奧運
     }
     scene = {
         'all_category': TX.Value.Scene.ALL_CATEGORY,
@@ -512,7 +536,7 @@ class Mapping:
             'cn': '-获得第一滴血(第一局)',
             'en': '-DRAW FIRST BLOOD (1st SET)'
         },
-        '獲得第一滴血(第一局)': {
+        '獲得第一滴血(第二局)': {
             'cn': '-获得第一滴血(第二局)',
             'en': '-DRAW FIRST BLOOD (2nd SET)'
         },

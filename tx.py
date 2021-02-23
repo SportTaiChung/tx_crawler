@@ -4,6 +4,7 @@ ps38 crawler
 """
 
 import asyncio
+from json.decoder import JSONDecodeError
 import os
 from datetime import datetime, timedelta
 import logging
@@ -83,6 +84,10 @@ class TXCrawler:
         self.ip_addr = ''
         self._session = None
         self._session_info = None
+        self.account_banned = False
+        self.relogin_count = 0
+        self.next_relogin_time = datetime.now()
+        self.site_maintaining = False
         self._sport_info = None
         self._mq = None
         self.user_agent = UserAgent(fallback=DEFAULT_USER_AGENT)
@@ -112,7 +117,7 @@ class TXCrawler:
         self.logger = self._logger_factory
         sessions = []
         if not self._config['read_from_file']:
-            await self.init_mq()
+            # await self.init_mq()
             if self._config['debug'] and os.path.exists('saved_cookies.pickle'):
                 with open('saved_cookies.pickle', 'rb') as session_file:
                     cookies = pickle.load(session_file, pickle.HIGHEST_PROTOCOL)
@@ -146,7 +151,7 @@ class TXCrawler:
             if self._config['dump']:
                 with open(f'{self.name}.bin', mode='wb') as f:
                     f.write(data.SerializeToString())
-            await self.upload_data(data)
+            # await self.upload_data(data)
             total_execution_time = (datetime.now() - self.last_execution_time).total_seconds()
             await self.logger.info('任務結束', extra={'step': 'total', 'total_process_time': total_execution_time, 'execution_id': self.execution_id})
             if not self.task_failed:
@@ -186,7 +191,7 @@ class TXCrawler:
                 if await self.login(session, domains, account, account_info['password']):
                     if await self.redirect_bet_site(session):
                         self._sport_info = await self.query_sport_info(session)
-                        if 'listBallCountryMenu' in self._sport_info:
+                        if TX.Key.SPORT_EVENT_INFO in self._sport_info:
                             sessions.append(session)
         return sessions
 
@@ -250,7 +255,20 @@ class TXCrawler:
                 await self.logger.warning(f'登入 {domain} 失敗，原因: 無法連上首頁，狀態碼: {home_resp.status}，回應: {await home_resp.text()}')
         await self.logger.warning(f'登入 {success_domains} 都失敗')
         return False
-    
+
+    async def relogin(self, session):
+        self.relogin_count += 1
+        domains = await self.test_site_domains(session)
+        login_success = await self.login(session, domains)
+        if not login_success:
+            await self.logger.error('重新登入失敗', extra={'step': 'crawl_data'})
+        elif await self.redirect_bet_site(session):
+            self._sport_info = await self.query_sport_info(session)
+            if TX.Key.SPORT_EVENT_INFO in self._sport_info:
+                await self.logger.error('重新登入成功', extra={'step': 'crawl_data'})
+        else:
+            await self.logger.error('重新登入有問題，無法取得資料', extra={'step': 'crawl_data'})
+
     def password_hash(self, password):
         md5_hash = md5(password.encode('utf-8')).hexdigest()
         hmac_md5_hash = hmac.new(md5_hash.encode('utf-8'), password.encode('utf-8'), md5)
@@ -277,7 +295,9 @@ class TXCrawler:
     async def redirect_bet_site(self, session):
         session_info = self._session_login_info_map[session]
         verify_key = None
-        async with session.get(f'{session_info["logined_domain"]}/{self._config["api_path"]["redirect_selection"]}', headers=self._config['login_headers']) as site_select_resp:
+        async with session.get(
+                f'{session_info["logined_domain"]}/{self._config["api_path"]["redirect_selection"]}',
+                headers=self._config['login_headers']) as site_select_resp:
             body = await site_select_resp.text()
             match = re.search(r'verify=([\w\d._-]+)&', body)
             if match:
@@ -402,11 +422,45 @@ class TXCrawler:
                 if len(encrypted_parts) == 4:
                     data = self.decrypt_data(encrypted_parts)
                     if not data:
-                        await self.logger.error(f'不支援的解密類型: {encrypted_parts[TX.Pos.Encryption.TYPE]}')
+                        await self.logger.error(f'不支援的解密類型: {encrypted_parts[TX.Pos.Encryption.TYPE]}', extra={'step': 'crawl_data'})
+                    else:
+                        self.account_banned = False
+                        self.site_maintaining = False
+                        self.relogin_count = 0
                 else:
-                    await self.logger.error(f'不支援的資料格式，資料長度: {len(encrypted_data)}，資料尾部: {encrypted_data[-200:]}')
+                    try:
+                        alert_info = json.loads(encrypted_data)
+                    except JSONDecodeError:
+                        await self.logger.error(f'不支援的資料格式，資料長度: {len(encrypted_data)}，資料尾部: {encrypted_data[-200:]}', extra={'step': 'crawl_data'})
+                        await self.relogin(session)
+                        return data
+                    if alert_info.get(TX.Key.ALERT_TYPE) == TX.Value.LOGOUT_TYPE and alert_info.get(TX.Key.IS_LOGOUT) == 'True':
+                        alert_id = alert_info.get(TX.Key.LOGOUT_TYPE_ID)
+                        if alert_id in TX.Value.LOGOUT_ALERT_IDS and self.relogin_count < 10:
+                            await self.relogin(session)
+                        elif alert_id in TX.Value.BANNED_ALERT_IDS:
+                            self.account_banned = True
+                            if self.next_relogin_time - datetime.now() < timedelta(hours=2):
+                                self.next_relogin_time = datetime.now() + timedelta(hours=2)
+                        elif alert_id == TX.Value.SITE_MAINTAIN_ALERT_ID:
+                            self.site_maintaining = True
+                            if self.next_relogin_time - datetime.now() < timedelta(minutes=30):
+                                self.next_relogin_time = datetime.now() + timedelta(minutes=30)
+                        await self.logger.error(
+                            f'已被登出，原因: {Mapping.logout_code.get(alert_info.get(TX.Key.LOGOUT_TYPE_ID), "未知")}，回應: {json.dumps(alert_info, ensure_ascii=False)}',
+                            extra={'step': 'crawl_data'})
+                    else:
+                        await self.logger.error(f'可能被被登出，回應: {json.dumps(alert_info, ensure_ascii=False)}', extra={'step': 'crawl_data'})
+                    if (
+                        (not self.account_banned or not self.site_maintaining)
+                        or ((self.account_banned or self.site_maintaining)
+                            and self.next_relogin_time < datetime.now())
+                       ) and self.relogin_count < 10:
+                        await self.relogin(session)
+                    elif self.relogin_count >= 10:
+                        await self.logger.error('重新登入次數過多，請確認爬蟲狀態，並手動重啟', extra={'step': 'crawl_data'})
             else:
-                await self.logger.error(f'請求資料失敗，狀態碼:{api_resp.status}，headers: {api_resp.headers}')
+                await self.logger.error(f'請求資料失敗，狀態碼:{api_resp.status}，headers: {api_resp.headers}', extra={'step': 'crawl_data'})
         return data
 
     def decrypt_data(self, encrypted_parts):
@@ -551,7 +605,7 @@ class TXCrawler:
             await self.logger.warning(f'爬取資料有錯誤訊息: {raw_data[TX.Key.ERROR_MESSAGE]}', extra={'step': 'parsing_and_mapping'})
             return
         elif raw_data.get(TX.Key.EMPTY_EVENT_LIST):
-            await self.logger.info(f'目前沒有資料', extra={'step': 'parsing_and_mapping'})
+            await self.logger.info('目前沒有資料', extra={'step': 'parsing_and_mapping'})
             return
 
         contest_parsing_error_count = 0
@@ -760,7 +814,7 @@ class TXCrawler:
         if category in ('all', 'soccer') and period == '0':
             key = TX.Key.EVENT_ID
         elif category in ('all', 'soccer') and period == '1':
-            key = TX.Key.EVENT_GP
+            key = TX.Key.EVENT_ID_GP
         elif category in ('pd', 'tg', 'hf') and period == '0':
             key = TX.Key.EVENT_ID_1
         elif category in ('pd', 'tg', 'hf') and period == '1':
@@ -936,7 +990,7 @@ class TXCrawler:
                 else:
                     sign_value = event_json[TX.Key.TOTAL_1ST_LINE_SIGN]
                     if sign_value and int(sign_value) not in (0, 3):
-                        sign = '-' if  int(sign_value) > 1 else '+'
+                        sign = '-' if int(sign_value) > 1 else '+'
                         line_value = f'{sign}{event_json[TX.Key.TOTAL_LINE_OTHER_VALUE]}'
                         total_line = self._compute_other_line(total_line, line_value)
                 over = event_json[TX.Key.TOTAL_OVER]
@@ -950,7 +1004,7 @@ class TXCrawler:
                 else:
                     sign_value = event_json[TX.Key.TOTAL_1ST_LINE_SIGN]
                     if sign_value and int(sign_value) not in (0, 3):
-                        sign = '-' if  int(sign_value) > 1 else '+'
+                        sign = '-' if int(sign_value) > 1 else '+'
                         line_value = f'{sign}{event_json[TX.Key.TOTAL_1ST_LINE_OTHER_VALUE]}'
                         total_line = self._compute_other_line(total_line, line_value)
                 over = event_json[TX.Key.TOTAL_1ST_OVER]
