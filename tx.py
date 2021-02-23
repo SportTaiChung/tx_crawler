@@ -1246,7 +1246,7 @@ class TXCrawler:
                 exchange_name = Mapping.exchange_name[game_type]
                 async with self.mq_channel_pool.acquire() as channel:
                     exchange = await channel.get_exchange(exchange_name)
-                    exchange.publish(
+                    await exchange.publish(
                         routing_key='',
                         message=aio_pika.Message(body=protobuf_data)
                     )
