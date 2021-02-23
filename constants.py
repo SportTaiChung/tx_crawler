@@ -238,8 +238,8 @@ class TX:
 
     class Value:
         LOGOUT_TYPE = 'backLogOutPage'
-        LOGOUT_ALERT_IDS = ['3', '4', '6', '7', '9', '11', '12', '14', '15', '']
-        BANNED_ALERT_IDS = ['1', '2', '5', '8', '13']
+        LOGOUT_ALERT_IDS = ['4', '6', '7', '9', '11', '12', '14', '15', '']
+        BANNED_ALERT_IDS = ['1', '2', '3', '5', '8', '13']
         SITE_MAINTAIN_ALERT_ID = '10'
         WORLD_CUP = 4
 

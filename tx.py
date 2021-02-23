@@ -414,6 +414,8 @@ class TXCrawler:
             del form['Scene']
             del form['CountryId']
         data = None
+        if self.next_relogin_time > datetime.now():
+            return data
         session_info = self._session_login_info_map[session]
         async with session.get(f'{session_info["logined_domain"]}/{api_url}', data=form) as api_resp:
             if api_resp.status == 200:
@@ -1210,7 +1212,7 @@ class TXCrawler:
 
     @step_logger('upload_data')
     async def upload_data(self, data):
-        if not data.aphdc:
+        if not data or not data.aphdc:
             return
         succeed = True
         update_ids = [h.game_id for h in self.data.aphdc]
