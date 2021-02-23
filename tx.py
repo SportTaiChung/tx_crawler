@@ -1215,10 +1215,10 @@ class TXCrawler:
         if not data or not data.aphdc:
             return
         succeed = True
-        update_ids = [h.game_id for h in self.data.aphdc]
+        update_ids = [h.game_id for h in data.aphdc]
         self.step_log_json['update_counts'] = len(update_ids)
         self.step_log_json['update_ids'] = update_ids
-        for handicaps in split_upload_bulk(self.data.aphdc, bulk_size=self._config['bulk_size']):
+        for handicaps in split_upload_bulk(data.aphdc, bulk_size=self._config['bulk_size']):
             bulk = protobuf_spec.ApHdcArr()
             bulk.aphdc.extend(handicaps)
             protobuf_data = bulk.SerializeToString()
