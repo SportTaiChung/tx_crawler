@@ -449,6 +449,7 @@ class TXCrawler:
                             self.site_maintaining = False
                             self.relogin_count = 0
                             self._total_page = data.get(TX.Key.TOTAL_PAGE_NUM, 1) or 1
+                            self.step_log_json['total_page'] = self._total_page
                             if not events:
                                 events = data
                             else:
