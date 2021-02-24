@@ -478,6 +478,8 @@ class TXCrawler:
                         await self.relogin(session)
                     elif self.relogin_count >= 10:
                         await self.logger.error('重新登入次數過多，請確認爬蟲狀態，並手動重啟', extra={'step': 'crawl_data'})
+                        self.next_relogin_time = datetime.now() + timedelta(hours=3)
+                        self.relogin_count = 0
             else:
                 await self.logger.error(f'請求資料失敗，狀態碼:{api_resp.status}，headers: {api_resp.headers}', extra={'step': 'crawl_data'})
         return data
