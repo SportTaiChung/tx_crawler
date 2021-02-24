@@ -1255,6 +1255,8 @@ class TXCrawler:
                 if self.task_spec['category'] == 'pd':
                     game_type = f'{game_type}_pd'
                 exchange_name = Mapping.exchange_name[game_type]
+                if self._config['env'] != 'production':
+                    exchange_name = self._config['test_exchange']
                 async with self.mq_channel_pool.acquire() as channel:
                     exchange = await channel.get_exchange(exchange_name)
                     await exchange.publish(
