@@ -149,10 +149,10 @@ class TX:
         ESRE_1ST_HOME = 'dbl_YSEY_Y_PL_2'
         ESRE_1ST_AWAY = 'dbl_YSEY_Z_PL_2'
         # 單雙
-        PARITY_ODD = 'dbl_DS_D_PL_1'
-        PARITY_EVEN = 'dbl_DS_S_PL_1'
-        PARITY_1ST_ODD = 'dbl_DS_D_PL_2'
-        PARITY_1ST_EVEN = 'dbl_DS_S_PL_2'
+        PARITY_ODD = 'dbl_DS_S_PL_1'
+        PARITY_EVEN = 'dbl_DS_D_PL_1'
+        PARITY_1ST_ODD = 'dbl_DS_S_PL_2'
+        PARITY_1ST_EVEN = 'dbl_DS_D_PL_2'
         # 額外盤口
         FULL_1ST_TYPE = 's_Scene_1'
         LIVE_TYPE = 's_Kzdp'
