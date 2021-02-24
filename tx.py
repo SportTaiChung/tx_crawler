@@ -94,6 +94,7 @@ class TXCrawler:
         self.headers = self._config['login_headers']
         self._session_login_info_map = {}
         self.name = self.task_spec['crawler_name']
+        self._total_page = 1
         self.data = None
 
     def set_logger_factory(self, logger_factory):
@@ -392,97 +393,104 @@ class TXCrawler:
 
     @step_logger('crawl_data')
     async def crawl_data(self, session):
-        game_type = self.task_spec['game_type']
-        # sport_type_name = sport_event_info[TX.Key.SPORT_NAME].split('||')[TX.Pos.Lang.TRADITIONAL_CHINESE]
-        # sport_type = TX.Value.SportType[sport_event_info[TX.Key.SPORT_TYPE]]
-        # ball_type = TX.Value.BallType[sport_event_info[TX.Key.BALL_TYPE]]
-        sport_type = TX.Value.SportType.get_sport_type(game_type)
-        ball_type = TX.Value.BallType.get_ball_type(game_type, self.task_spec['category'])
-        sport_list = self._sport_info[TX.Key.SPORT_EVENT_INFO]
-        sport_info_map = {}
-        for sport in sport_list:
-            sport_info_map[sport[TX.Key.BALL_TYPE]] = sport
-        sport_info = None
-        if self.task_spec['category'] in ('pd', 'tg', 'hf'):
-            sport_info = sport_info_map[TX.Value.BallType.SOCCER.value]
-        else:
-            sport_info = sport_info_map[ball_type.value]
-        is_world_cup = sport_info.get(TX.Key.IS_WORLD_CUP, '0')
-        is_olympic = 'true' if sport_type is TX.Value.SportType.SOCCER_OLYMPIC else 'false'
-        if is_olympic == 'true':
-            sport_type = TX.Value.SportType.SOCCER
-        sort_type = TX.Value.SortType.TIME_SORT if sport_type is TX.Value.SportType.SOCCER else TX.Value.SortType.HOT_SORT
-        timestamp_millisecond = int(time() * 1000)
-        page_number = self.task_spec.get('page', 1)
-        form = {
-            'BallType': ball_type.value,
-            'BallId': ball_type.get_id().value,
-            'Scene': TX.Value.Scene.get_scene(self.task_spec['period']).value,
-            'CountryId': TX.Value.CategoryID.get_id(self.task_spec['category']).value,
-            'IsOlympic': is_olympic,
-            'IsWorldCup': is_world_cup,
-            'SortOrder': sort_type.value,
-            'PageIndex': page_number,
-            'vv': timestamp_millisecond
-        }
-        api_url = self._config['api_path']['event_api']
-        if self.task_spec['category'] in ('pd', 'tg', 'hf'):
-            api_url = self._config['api_path']['special_handicap_api']
-            del form['Scene']
-            del form['CountryId']
-        data = None
-        if self.next_relogin_time > datetime.now():
-            return data
-        session_info = self._session_login_info_map[session]
-        async with session.get(f'{session_info["logined_domain"]}/{api_url}', data=form) as api_resp:
-            if api_resp.status == 200:
-                encrypted_data = await api_resp.text()
-                encrypted_parts = encrypted_data.split('〄')
-                if len(encrypted_parts) == 4:
-                    data = self.decrypt_data(encrypted_parts)
-                    if not data:
-                        await self.logger.error(f'不支援的解密類型: {encrypted_parts[TX.Pos.Encryption.TYPE]}', extra={'step': 'crawl_data'})
-                    else:
-                        self.account_banned = False
-                        self.site_maintaining = False
-                        self.relogin_count = 0
-                else:
-                    try:
-                        alert_info = json.loads(encrypted_data)
-                    except JSONDecodeError:
-                        await self.logger.error(f'不支援的資料格式，資料長度: {len(encrypted_data)}，資料尾部: {encrypted_data[-200:]}', extra={'step': 'crawl_data'})
-                        await self.relogin(session)
-                        return data
-                    if alert_info.get(TX.Key.ALERT_TYPE) == TX.Value.LOGOUT_TYPE and alert_info.get(TX.Key.IS_LOGOUT) == 'True':
-                        alert_id = alert_info.get(TX.Key.LOGOUT_TYPE_ID)
-                        if alert_id in TX.Value.LOGOUT_ALERT_IDS and self.relogin_count < 10:
-                            await self.relogin(session)
-                        elif alert_id in TX.Value.BANNED_ALERT_IDS:
-                            self.account_banned = True
-                            if self.next_relogin_time - datetime.now() < timedelta(hours=2):
-                                self.next_relogin_time = datetime.now() + timedelta(hours=2)
-                        elif alert_id == TX.Value.SITE_MAINTAIN_ALERT_ID:
-                            self.site_maintaining = True
-                            if self.next_relogin_time - datetime.now() < timedelta(minutes=30):
-                                self.next_relogin_time = datetime.now() + timedelta(minutes=30)
-                        await self.logger.error(
-                            f'已被登出，原因: {Mapping.logout_code.get(alert_info.get(TX.Key.LOGOUT_TYPE_ID), "未知")}，回應: {json.dumps(alert_info, ensure_ascii=False)}',
-                            extra={'step': 'crawl_data'})
-                    else:
-                        await self.logger.error(f'可能被被登出，回應: {json.dumps(alert_info, ensure_ascii=False)}', extra={'step': 'crawl_data'})
-                    if (
-                        (not self.account_banned or not self.site_maintaining)
-                        or ((self.account_banned or self.site_maintaining)
-                            and self.next_relogin_time < datetime.now())
-                       ) and self.relogin_count < 10:
-                        await self.relogin(session)
-                    elif self.relogin_count >= 10:
-                        await self.logger.error('重新登入次數過多，請確認爬蟲狀態，並手動重啟', extra={'step': 'crawl_data'})
-                        self.next_relogin_time = datetime.now() + timedelta(hours=3)
-                        self.relogin_count = 0
+        events = None
+        for page_number in range(1, self._total_page + 1):
+            game_type = self.task_spec['game_type']
+            # sport_type_name = sport_event_info[TX.Key.SPORT_NAME].split('||')[TX.Pos.Lang.TRADITIONAL_CHINESE]
+            # sport_type = TX.Value.SportType[sport_event_info[TX.Key.SPORT_TYPE]]
+            # ball_type = TX.Value.BallType[sport_event_info[TX.Key.BALL_TYPE]]
+            sport_type = TX.Value.SportType.get_sport_type(game_type)
+            ball_type = TX.Value.BallType.get_ball_type(game_type, self.task_spec['category'])
+            sport_list = self._sport_info[TX.Key.SPORT_EVENT_INFO]
+            sport_info_map = {}
+            for sport in sport_list:
+                sport_info_map[sport[TX.Key.BALL_TYPE]] = sport
+            sport_info = None
+            if self.task_spec['category'] in ('pd', 'tg', 'hf'):
+                sport_info = sport_info_map[TX.Value.BallType.SOCCER.value]
             else:
-                await self.logger.error(f'請求資料失敗，狀態碼:{api_resp.status}，headers: {api_resp.headers}', extra={'step': 'crawl_data'})
-        return data
+                sport_info = sport_info_map[ball_type.value]
+            is_world_cup = sport_info.get(TX.Key.IS_WORLD_CUP, '0')
+            is_olympic = 'true' if sport_type is TX.Value.SportType.SOCCER_OLYMPIC else 'false'
+            if is_olympic == 'true':
+                sport_type = TX.Value.SportType.SOCCER
+            sort_type = TX.Value.SortType.TIME_SORT if sport_type is TX.Value.SportType.SOCCER else TX.Value.SortType.HOT_SORT
+            timestamp_millisecond = int(time() * 1000)
+            form = {
+                'BallType': ball_type.value,
+                'BallId': ball_type.get_id().value,
+                'Scene': TX.Value.Scene.get_scene(self.task_spec['period']).value,
+                'CountryId': TX.Value.CategoryID.get_id(self.task_spec['category']).value,
+                'IsOlympic': is_olympic,
+                'IsWorldCup': is_world_cup,
+                'SortOrder': sort_type.value,
+                'PageIndex': page_number,
+                'vv': timestamp_millisecond
+            }
+            api_url = self._config['api_path']['event_api']
+            if self.task_spec['category'] in ('pd', 'tg', 'hf'):
+                api_url = self._config['api_path']['special_handicap_api']
+                del form['Scene']
+                del form['CountryId']
+            data = None
+            if self.next_relogin_time > datetime.now():
+                return events
+            session_info = self._session_login_info_map[session]
+            async with session.get(f'{session_info["logined_domain"]}/{api_url}', data=form) as api_resp:
+                if api_resp.status == 200:
+                    encrypted_data = await api_resp.text()
+                    encrypted_parts = encrypted_data.split('〄')
+                    if len(encrypted_parts) == 4:
+                        data = self.decrypt_data(encrypted_parts)
+                        if not data:
+                            await self.logger.error(f'不支援的解密類型: {encrypted_parts[TX.Pos.Encryption.TYPE]}', extra={'step': 'crawl_data'})
+                        else:
+                            self.account_banned = False
+                            self.site_maintaining = False
+                            self.relogin_count = 0
+                            self._total_page = data.get(TX.Key.TOTAL_PAGE_NUM, 1) or 1
+                            if not events:
+                                events = data
+                            else:
+                                events[TX.Key.EVENT_LIST].extend(data.get(TX.Key.EVENT_LIST, []))
+                            await asyncio.sleep(1)
+                    else:
+                        try:
+                            alert_info = json.loads(encrypted_data)
+                        except JSONDecodeError:
+                            await self.logger.error(f'不支援的資料格式，資料長度: {len(encrypted_data)}，資料尾部: {encrypted_data[-200:]}', extra={'step': 'crawl_data'})
+                            await self.relogin(session)
+                            return events
+                        if alert_info.get(TX.Key.ALERT_TYPE) == TX.Value.LOGOUT_TYPE and alert_info.get(TX.Key.IS_LOGOUT) == 'True':
+                            alert_id = alert_info.get(TX.Key.LOGOUT_TYPE_ID)
+                            if alert_id in TX.Value.LOGOUT_ALERT_IDS and self.relogin_count < 10:
+                                await self.relogin(session)
+                            elif alert_id in TX.Value.BANNED_ALERT_IDS:
+                                self.account_banned = True
+                                if self.next_relogin_time - datetime.now() < timedelta(hours=2):
+                                    self.next_relogin_time = datetime.now() + timedelta(hours=2)
+                            elif alert_id == TX.Value.SITE_MAINTAIN_ALERT_ID:
+                                self.site_maintaining = True
+                                if self.next_relogin_time - datetime.now() < timedelta(minutes=30):
+                                    self.next_relogin_time = datetime.now() + timedelta(minutes=30)
+                            await self.logger.error(
+                                f'已被登出，原因: {Mapping.logout_code.get(alert_info.get(TX.Key.LOGOUT_TYPE_ID), "未知")}，回應: {json.dumps(alert_info, ensure_ascii=False)}',
+                                extra={'step': 'crawl_data'})
+                        else:
+                            await self.logger.error(f'可能被被登出，回應: {json.dumps(alert_info, ensure_ascii=False)}', extra={'step': 'crawl_data'})
+                        if (
+                            (not self.account_banned or not self.site_maintaining)
+                            or ((self.account_banned or self.site_maintaining)
+                                and self.next_relogin_time < datetime.now())
+                        ) and self.relogin_count < 10:
+                            await self.relogin(session)
+                        elif self.relogin_count >= 10:
+                            await self.logger.error('重新登入次數過多，請確認爬蟲狀態，並手動重啟', extra={'step': 'crawl_data'})
+                            self.next_relogin_time = datetime.now() + timedelta(hours=3)
+                            self.relogin_count = 0
+                else:
+                    await self.logger.error(f'請求資料失敗，狀態碼:{api_resp.status}，headers: {api_resp.headers}', extra={'step': 'crawl_data'})
+        return events
 
     def decrypt_data(self, encrypted_parts):
         decrypted_data = None
