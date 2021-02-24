@@ -454,7 +454,7 @@ class TXCrawler:
                                 events = data
                             else:
                                 events[TX.Key.EVENT_LIST].extend(data.get(TX.Key.EVENT_LIST, []))
-                            await asyncio.sleep(1)
+                            await asyncio.sleep(self._config['crawl_interval'])
                     else:
                         try:
                             alert_info = json.loads(encrypted_data)
