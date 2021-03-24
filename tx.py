@@ -277,13 +277,13 @@ class TXCrawler:
     async def relogin(self, session):
         self.relogin_count += 1
         domains = await self.test_site_domains(session)
-        login_success = await self.login(session, domains)
+        login_success = await self.login(session, domains, list(self._config['accounts'].keys())[0], list(self._config['accounts'].values())[0]['password'])
         if not login_success:
             await self.logger.error('重新登入失敗', extra={'step': 'crawl_data'})
         elif await self.redirect_bet_site(session):
             self._sport_info = await self.query_sport_info(session)
             if TX.Key.SPORT_EVENT_INFO in self._sport_info:
-                await self.logger.error('重新登入成功', extra={'step': 'crawl_data'})
+                await self.logger.info('重新登入成功', extra={'step': 'crawl_data'})
         else:
             await self.logger.error('重新登入有問題，無法取得資料', extra={'step': 'crawl_data'})
 
@@ -729,8 +729,34 @@ class TXCrawler:
                         self.reverse_odds(spread, money_line, esre)
                     event_full = protobuf_spec.ApHdc()
                     event_full.CopyFrom(event)
+                    second_half_pattern = re.compile(r'(總得分|優先|三分球)')
                     if self.task_spec['period'] == Period.LIVE.value:
                         event_full.game_type = Period.LIVE_FULL.value
+                    elif self.task_spec['period'] == 'set':
+                        if event_json[TX.Key.FULL_1ST_TYPE] == '11':
+                            event_full.game_type = '1q'
+                            event_full.information.league += '-第一節'
+                            event_full.information.cn_league += '-第一节'
+                            event_full.information.en_league += ' - 1Q'
+                        elif event_json[TX.Key.FULL_1ST_TYPE] == '12':
+                            event_full.game_type = '2q'
+                            event_full.information.league += '-第二節'
+                            event_full.information.cn_league += '-第二节'
+                            event_full.information.en_league += ' - 2Q'
+                        elif event_json[TX.Key.FULL_1ST_TYPE] == '13':
+                            event_full.game_type = '3q'
+                            event_full.information.league += '-第三節'
+                            event_full.information.cn_league += '-第三节'
+                            event_full.information.en_league += ' - 3Q'
+                        elif event_json[TX.Key.FULL_1ST_TYPE] == '14':
+                            event_full.game_type = '4q'
+                            event_full.information.league += '-第四節'
+                            event_full.information.cn_league += '-第四节'
+                            event_full.information.en_league += ' - 4Q'
+                    elif self.task_spec['period'] == '2nd':
+                        event_full.game_type = Period.SECOND_HALF.value
+                    elif second_half_pattern.search(event_full.information.league):
+                        event_full.game_type = Period.SECOND_HALF.value
                     else:
                         event_full.game_type = Period.FULL.value
                     event_full.twZF.CopyFrom(spread)
@@ -753,6 +779,29 @@ class TXCrawler:
                         event_1st.CopyFrom(event)
                         if self.task_spec['period'] == Period.LIVE.value:
                             event_1st.game_type = Period.LIVE_FIRST_HALF.value
+                        elif self.task_spec['period'] == 'set':
+                            if event_json[TX.Key.FULL_1ST_TYPE] == '11':
+                                event_full.game_type = '1q'
+                                event_full.information.league += '-第一節'
+                                event_full.information.cn_league += '-第一节'
+                                event_full.information.en_league += ' - 1Q'
+                            elif event_json[TX.Key.FULL_1ST_TYPE] == '12':
+                                event_full.game_type = '2q'
+                                event_full.information.league += '-第二節'
+                                event_full.information.cn_league += '-第二节'
+                                event_full.information.en_league += ' - 2Q'
+                            elif event_json[TX.Key.FULL_1ST_TYPE] == '13':
+                                event_full.game_type = '3q'
+                                event_full.information.league += '-第三節'
+                                event_full.information.cn_league += '-第三节'
+                                event_full.information.en_league += ' - 3Q'
+                            elif event_json[TX.Key.FULL_1ST_TYPE] == '14':
+                                event_full.game_type = '4q'
+                                event_full.information.league += '-第四節'
+                                event_full.information.cn_league += '-第四节'
+                                event_full.information.en_league += ' - 4Q'
+                        elif self.task_spec['period'] == '2nd':
+                            event_full.game_type = Period.SECOND_HALF.value
                         else:
                             event_1st.game_type = Period.FIRST_HALF.value
                         event_1st.twZF.CopyFrom(spread_1st)
@@ -766,10 +815,7 @@ class TXCrawler:
                 elif self.task_spec['period'] == 'first_last_point':
                     event_first_last = protobuf_spec.ApHdc()
                     event_first_last.CopyFrom(event)
-                    if self.task_spec['period'] == Period.LIVE.value:
-                        event_first_last.game_type = Period.LIVE_FULL.value
-                    else:
-                        event_first_last.game_type = Period.FULL.value
+                    event_first_last.game_type = Period.MULTI.value
                     if self.task_spec['game_type'] == 'hockey':
                         first = self.extract_spread(event_json, Period.FULL)
                         last = self.extract_total(event_json, Period.FULL)
@@ -831,8 +877,8 @@ class TXCrawler:
 
             except (IndexError, KeyError, TypeError):
                 contest_parsing_error_count += 1
-                await self.logger.warning('發生資料映射失敗: %s', traceback.format_exc(), extra={'step': 'parsing_and_mapping'})
-                await self.logger.warning('映射失敗資料: %s', json.dumps(event_json, ensure_ascii=False), extra={'step': 'parsing_and_mapping'})
+                await self.logger.warning('發生資料映射失敗: %s' % traceback.format_exc(), extra={'step': 'parsing_and_mapping'})
+                await self.logger.warning('映射失敗資料: %s' % json.dumps(event_json, ensure_ascii=False), extra={'step': 'parsing_and_mapping'})
                 if contest_parsing_error_count > 10:
                     self.task_failed = True
                     await self.logger.error('解析映射資料失敗10次，請確認資料映射正確性', extra={'step': 'parsing_and_mapping', 'execution_id': self.execution_id})
@@ -994,8 +1040,8 @@ class TXCrawler:
         return f'{spread_line_num-0.25}/{spread_line_num+0.25}'
 
     def _compute_other_line(self, line, value):
-        if '.5' in line:
-            return line
+        if line and line[-2:] == '.5':
+            return f'{line[:-2]}-:100'
         return f'{line}{value}'
 
     def _line_add_sign(self, line, advanced_team):
@@ -1012,13 +1058,13 @@ class TXCrawler:
         over = '0'
         under = '0'
         if period is Period.FULL:
-            total_line = event_json[TX.Key.TOTAL_LINE]
+            total_line = event_json[TX.Key.TOTAL_LINE] or ''
             if total_line:
                 if self.task_spec['game_type'] == GameType.soccer.value:
                     line_num = self._soccer_line_convert(total_line)
                     total_line = self._compute_soccer_line(line_num)
                 else:
-                    sign_value = event_json[TX.Key.TOTAL_1ST_LINE_SIGN]
+                    sign_value = event_json[TX.Key.TOTAL_LINE_SIGN]
                     if sign_value and int(sign_value) not in (0, 3):
                         sign = '-' if int(sign_value) > 1 else '+'
                         line_value = f'{sign}{event_json[TX.Key.TOTAL_LINE_OTHER_VALUE]}'
@@ -1026,7 +1072,7 @@ class TXCrawler:
                 over = event_json[TX.Key.TOTAL_OVER]
                 under = event_json[TX.Key.TOTAL_UNDER]
         elif period is Period.FIRST_HALF:
-            total_line = event_json[TX.Key.TOTAL_1ST_LINE]
+            total_line = event_json[TX.Key.TOTAL_1ST_LINE] or ''
             if total_line:
                 if self.task_spec['game_type'] == GameType.soccer.value:
                     line_num = self._soccer_line_convert(total_line)
@@ -1039,6 +1085,10 @@ class TXCrawler:
                         total_line = self._compute_other_line(total_line, line_value)
                 over = event_json[TX.Key.TOTAL_1ST_OVER]
                 under = event_json[TX.Key.TOTAL_1ST_UNDER]
+        if total_line and total_line[-2:] == '.5':
+            total_line = f'{total_line[:-2]}-100'
+        elif '+' not in total_line[1:] or '-' not in total_line[1:]:
+            total_line += '+0'
         return protobuf_spec.typeDS(
             line=total_line,
             over=str(over),

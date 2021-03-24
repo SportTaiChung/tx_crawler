@@ -158,14 +158,14 @@ class TX:
         LIVE_TYPE = 's_Kzdp'
         SECOND_HALF = 's_Scene_2'
         # 搶首
-        FIRST_GOAL_HOME = 'dbl_QSF_Z_PL_1'
-        FIRST_GOAL_AWAY = 'dbl_QSF_Y_PL_1'
+        FIRST_GOAL_HOME = 'dbl_QSF_Y_PL_1'
+        FIRST_GOAL_AWAY = 'dbl_QSF_Z_PL_1'
         # 搶尾
-        LAST_GOAL_HOME = 'dbl_QWF_Z_PL_1'
-        LAST_GOAL_AWAY = 'dbl_QWF_Y_PL_1'
+        LAST_GOAL_HOME = 'dbl_QWF_Y_PL_1'
+        LAST_GOAL_AWAY = 'dbl_QWF_Z_PL_1'
         # 單節最高分
-        SINGLE_SET_HIGHEST_SCORE_HOME = 'dbl_DJZG_Z_PL_1'
-        SINGLE_SET_HIGHEST_SCORE_AWAY = 'dbl_DJZG_Y_PL_1'
+        SINGLE_SET_HIGHEST_SCORE_HOME = 'dbl_DJZG_Y_PL_1'
+        SINGLE_SET_HIGHEST_SCORE_AWAY = 'dbl_DJZG_Z_PL_1'
         # 波膽
         # 主隊
         CORRECT_SCORE_1_0 = 's_Z10'
