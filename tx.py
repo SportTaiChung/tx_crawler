@@ -123,9 +123,6 @@ class TXCrawler:
                 with open('saved_cookies.pickle', 'rb') as session_file:
                     cookies = pickle.load(session_file, pickle.HIGHEST_PROTOCOL)
                     sessions = await self.init_session(cookies=cookies)
-            else:
-                sessions = await self.init_session()
-            session = sessions[0]
             if self._config.get('env') == 'production':
                 telegram_handler = AsyncTelegramHandler(
                     session=session,
@@ -134,7 +131,14 @@ class TXCrawler:
                 )
                 self.logger.add_handler(telegram_handler)
         self.logger.info('開始更新資料')
+        session = None
         while self._config['_running']:
+            if not session or self.account_banned or self.site_maintaining:
+                sessions = await self.init_session()
+                session = sessions[0]
+                if not session:
+                    await self.logger.error('登入失敗，休眠5分鐘')
+                    await asyncio.sleep(300)
             self.task_failed = False
             self.execution_id = str(uuid.uuid4()).replace('-', '')
             if self._config['read_from_file']:
@@ -394,7 +398,10 @@ class TXCrawler:
     @step_logger('crawl_data')
     async def crawl_data(self, session):
         events = None
+        self._total_page = self.task_spec.get('page') or self._total_page or 1
         for page_number in range(1, self._total_page + 1):
+            if self.task_spec.get('page') and self.task_spec.get('page') != page_number:
+                continue
             game_type = self.task_spec['game_type']
             # sport_type_name = sport_event_info[TX.Key.SPORT_NAME].split('||')[TX.Pos.Lang.TRADITIONAL_CHINESE]
             # sport_type = TX.Value.SportType[sport_event_info[TX.Key.SPORT_TYPE]]
@@ -448,7 +455,7 @@ class TXCrawler:
                             self.account_banned = False
                             self.site_maintaining = False
                             self.relogin_count = 0
-                            self._total_page = data.get(TX.Key.TOTAL_PAGE_NUM, 1) or 1
+                            self._total_page = self.task_spec.get('page') or data.get(TX.Key.TOTAL_PAGE_NUM, 1) or 1
                             self.step_log_json['total_page'] = self._total_page
                             if not events:
                                 events = data
@@ -647,9 +654,9 @@ class TXCrawler:
                 event.source = Source.TX.value
                 sport_name = event_json[TX.Key.EVENT_SPORT_NAME].split('||')[0]
                 game_id_key = self.get_game_id_key(self.task_spec['category'], event_json[TX.Key.FULL_1ST_TYPE])
-                game_id = event_json[game_id_key]
+                game_id = event_json[game_id_key] or event_json[TX.Key.EVENT_ID_GP] or '4444444444'
                 event.game_id = self.modify_game_id(game_id, sport_name)
-                event.ip = ''
+                event.ip = 'python'
                 event.status = '0'
                 timestamp_str = timestamp_pattern.search(event_json[TX.Key.EVENT_TIME]).group(1)
                 event_time = datetime.fromtimestamp(int(timestamp_str) // 1000)
@@ -662,32 +669,37 @@ class TXCrawler:
                 league_names = event_json[TX.Key.EVENT_LEAGUE_NAME_WITH_POSTFIX].split('||')
                 self.add_league_postfix(league_names, sport_name, event_json)
                 event_info.league = league_names[TX.Pos.Lang.TRADITIONAL_CHINESE]
+                # 過濾不使用足球走地賽事
+                if self.task_spec['period'] == Period.LIVE.value and self.task_spec[
+                        'game_type'] == GameType.soccer.value and EXCLUDED_LEAGUES.search(
+                            event_info.league):
+                    continue
                 event_info.cn_league = league_names[TX.Pos.Lang.SIMPLIFIED_CHINESE]
                 event_info.en_league = league_names[TX.Pos.Lang.ENGLISH]
                 if '角球' in event_info.league:
                     event.score.CopyFrom(
                         protobuf_spec.score(
-                            home=event_json[TX.Key.EVENT_SCORE_HOME],
-                            away=event_json[TX.Key.EVENT_SCORE_AWAY]
+                            home=event_json[TX.Key.EVENT_SCORE_HOME] or '0',
+                            away=event_json[TX.Key.EVENT_SCORE_AWAY] or '0'
                         )
                     )
                     event.conner.CopyFrom(
                         protobuf_spec.conner(
-                            home=event.score.home,
-                            away=event.score.away
+                            home=event.score.home or '0',
+                            away=event.score.away or '0'
                         )
                     )
                 else:
                     event.score.CopyFrom(
                         protobuf_spec.score(
-                            home=event_json[TX.Key.EVENT_SCORE_HOME],
-                            away=event_json[TX.Key.EVENT_SCORE_AWAY]
+                            home=event_json[TX.Key.EVENT_SCORE_HOME] or '0',
+                            away=event_json[TX.Key.EVENT_SCORE_AWAY] or '0'
                         )
                     )
                 event.redcard.CopyFrom(
                     protobuf_spec.redcard(
-                        home=str(event_json[TX.Key.EVENT_RED_CARD_HOME]),
-                        away=str(event_json[TX.Key.EVENT_RED_CARD_AWAY])
+                        home=str(event_json[TX.Key.EVENT_RED_CARD_HOME]) or '0',
+                        away=str(event_json[TX.Key.EVENT_RED_CARD_AWAY]) or '0'
                     )
                 )
                 event.yellowcard.CopyFrom(protobuf_spec.yellowcard(home='0', away='0'))
@@ -811,7 +823,7 @@ class TXCrawler:
                         event_1st.esre.CopyFrom(esre_1st)
                         event_1st.sd.CopyFrom(parity_1st)
                         event_proto_list.append(event_1st)
-                # 搶首尾與單節最高分
+                #搶首尾與單節最高分
                 elif self.task_spec['period'] == 'first_last_point':
                     event_first_last = protobuf_spec.ApHdc()
                     event_first_last.CopyFrom(event)
@@ -978,33 +990,35 @@ class TXCrawler:
         advanced_team = 1
         home_odds = '0'
         away_odds = '0'
-        if period is Period.FULL:
+        if period is Period.FULL and event_json[TX.Key.SPREAD_FULL_CLOSE]:
             spread_line = event_json[TX.Key.SPREAD_LINE]
             advanced_team = event_json[TX.Key.SPREAD_ADVANCED_TEAM]
             if spread_line:
                 if self.task_spec['game_type'] == GameType.soccer.value:
                     line_num = self._soccer_line_convert(spread_line)
                     spread_line = self._compute_soccer_line(line_num)
+                    spread_line = self._compute_other_line(spread_line, '')
                 else:
                     sign = '-' if int(event_json[TX.Key.SPREAD_OTHER_ADVANCED_TEAM]) > 1 else '+'
                     line_value = f'{sign}{event_json[TX.Key.SPREAD_LINE_OTHER_VALUE]}'
                     spread_line = self._compute_other_line(spread_line, line_value)
                 home_odds = event_json[TX.Key.SPREAD_HOME]
                 away_odds = event_json[TX.Key.SPREAD_AWAY]
-        elif period is Period.FIRST_HALF:
+        elif period is Period.FIRST_HALF and event_json[TX.Key.SPREAD_1ST_CLOSE]:
             spread_line = event_json[TX.Key.SPREAD_1ST_LINE]
             advanced_team = event_json[TX.Key.SPREAD_1ST_ADVANCED_TEAM]
             if spread_line:
                 if self.task_spec['game_type'] == GameType.soccer.value:
                     line_num = self._soccer_line_convert(spread_line)
                     spread_line = self._compute_soccer_line(line_num)
+                    spread_line = self._compute_other_line(spread_line, '')
                 else:
                     sign = '-' if int(event_json[TX.Key.SPREAD_1ST_OTHER_ADVANCED_TEAM]) > 1 else '+'
                     line_value = f'{sign}{event_json[TX.Key.SPREAD_1ST_LINE_OTHER_VALUE]}'
                     spread_line = self._compute_other_line(spread_line, line_value)
                 home_odds = event_json[TX.Key.SPREAD_1ST_HOME]
                 away_odds = event_json[TX.Key.SPREAD_1ST_AWAY]
-        if spread_line is None:
+        if not spread_line:
             spread_line = '-0'
         home_line, away_line = self._line_add_sign(spread_line, advanced_team)
         return protobuf_spec.twZF(
@@ -1040,8 +1054,8 @@ class TXCrawler:
         return f'{spread_line_num-0.25}/{spread_line_num+0.25}'
 
     def _compute_other_line(self, line, value):
-        if line and line[-2:] == '.5':
-            return f'{line[:-2]}-:100'
+        if line and line[-2:] == '.5' and '/' not in line:
+            return f'{line[:-2]}-100'
         return f'{line}{value}'
 
     def _line_add_sign(self, line, advanced_team):
@@ -1057,12 +1071,13 @@ class TXCrawler:
         total_line = '0'
         over = '0'
         under = '0'
-        if period is Period.FULL:
+        if period is Period.FULL and event_json[TX.Key.TOTAL_FULL_CLOSE]:
             total_line = event_json[TX.Key.TOTAL_LINE] or ''
             if total_line:
                 if self.task_spec['game_type'] == GameType.soccer.value:
                     line_num = self._soccer_line_convert(total_line)
                     total_line = self._compute_soccer_line(line_num)
+                    total_line = self._compute_other_line(total_line, '')
                 else:
                     sign_value = event_json[TX.Key.TOTAL_LINE_SIGN]
                     if sign_value and int(sign_value) not in (0, 3):
@@ -1071,12 +1086,13 @@ class TXCrawler:
                         total_line = self._compute_other_line(total_line, line_value)
                 over = event_json[TX.Key.TOTAL_OVER]
                 under = event_json[TX.Key.TOTAL_UNDER]
-        elif period is Period.FIRST_HALF:
+        elif period is Period.FIRST_HALF and event_json[TX.Key.TOTAL_1ST_CLOSE]:
             total_line = event_json[TX.Key.TOTAL_1ST_LINE] or ''
             if total_line:
                 if self.task_spec['game_type'] == GameType.soccer.value:
                     line_num = self._soccer_line_convert(total_line)
                     total_line = self._compute_soccer_line(line_num)
+                    total_line = self._compute_other_line(total_line, '')
                 else:
                     sign_value = event_json[TX.Key.TOTAL_1ST_LINE_SIGN]
                     if sign_value and int(sign_value) not in (0, 3):
@@ -1085,9 +1101,11 @@ class TXCrawler:
                         total_line = self._compute_other_line(total_line, line_value)
                 over = event_json[TX.Key.TOTAL_1ST_OVER]
                 under = event_json[TX.Key.TOTAL_1ST_UNDER]
-        if total_line and total_line[-2:] == '.5':
+        if total_line and total_line[-2:] == '.5' and '/' not in total_line:
             total_line = f'{total_line[:-2]}-100'
-        elif '+' not in total_line[1:] or '-' not in total_line[1:]:
+        elif not total_line:
+            total_line = '-0+0'
+        elif '+' not in total_line[1:] and '-' not in total_line[1:] and '/' not in total_line:
             total_line += '+0'
         return protobuf_spec.typeDS(
             line=total_line,
@@ -1096,12 +1114,12 @@ class TXCrawler:
         )
 
     def extract_money_line(self, event_json, period):
-        if period is Period.FULL:
+        if period is Period.FULL and event_json[TX.Key.MONEY_LINE_FULL_CLOSE]:
             return protobuf_spec.onetwo(
                 home=str(event_json.get(TX.Key.MONEY_LINE_HOME, 0)),
                 away=str(event_json.get(TX.Key.MONEY_LINE_AWAY, 0))
             ), event_json.get(TX.Key.MONEY_LINE_DRAW, '0')
-        elif period is Period.FIRST_HALF:
+        elif period is Period.FIRST_HALF and event_json[TX.Key.MONEY_LINE_1ST_CLOSE]:
             return protobuf_spec.onetwo(
                 home=str(event_json.get(TX.Key.MONEY_LINE_HOME, 0)),
                 away=str(event_json.get(TX.Key.MONEY_LINE_AWAY, 0))
@@ -1110,7 +1128,7 @@ class TXCrawler:
 
     def extract_esre(self, event_json, period):
         advanced_team = protobuf_spec.whichTeam.home
-        if period is Period.FULL:
+        if period is Period.FULL and event_json[TX.Key.ESRE_FULL_CLOSE]:
             if event_json.get(TX.Key.SPREAD_ADVANCED_TEAM) == TX.Value.AdvancedTeam.AWAY.value:
                 advanced_team = protobuf_spec.whichTeam.away
             return protobuf_spec.Esre(
@@ -1118,7 +1136,7 @@ class TXCrawler:
                 home=str(event_json.get(TX.Key.ESRE_HOME, '0')),
                 away=str(event_json.get(TX.Key.ESRE_AWAY, '0'))
             )
-        elif period is Period.FIRST_HALF:
+        elif period is Period.FIRST_HALF and event_json[TX.Key.ESRE_1ST_CLOSE]:
             if event_json.get(TX.Key.SPREAD_1ST_ADVANCED_TEAM) == TX.Value.AdvancedTeam.AWAY.value:
                 advanced_team = protobuf_spec.whichTeam.away
             return protobuf_spec.Esre(
@@ -1129,7 +1147,7 @@ class TXCrawler:
         return protobuf_spec.Esre(let=advanced_team, home='0', away='0')
 
     def extract_parity(self, event_json, period):
-        if period is Period.FULL:
+        if period is Period.FULL and event_json[TX.Key.PARITY_FULL_CLOSE]:
             odd = str(event_json.get(TX.Key.PARITY_ODD, 0))
             even = str(event_json.get(TX.Key.PARITY_EVEN, 0))
             if odd[0] != '-' and even[0] != '-':
@@ -1137,7 +1155,7 @@ class TXCrawler:
                     home=odd,
                     away=even
                 )
-        elif period is Period.FIRST_HALF:
+        elif period is Period.FIRST_HALF and event_json[TX.Key.PARITY_1ST_CLOSE]:
             odd = str(event_json.get(TX.Key.PARITY_1ST_ODD, 0))
             even = str(event_json.get(TX.Key.PARITY_1ST_EVEN, 0))
             if odd[0] != '-' and even[0] != '-':
@@ -1307,6 +1325,7 @@ class TXCrawler:
                 exchange_name = Mapping.exchange_name[game_type]
                 if self._config['env'] != 'production':
                     exchange_name = self._config['test_exchange']
+                print(exchange_name)
                 async with self.mq_channel_pool.acquire() as channel:
                     exchange = await channel.get_exchange(exchange_name)
                     await exchange.publish(

@@ -57,7 +57,8 @@ if __name__ == '__main__':
                         'game_type': task['name'],
                         'period': target['period'],
                         'category': target['category'],
-                        'live': target.get('live', False)
+                        'live': target.get('live', False),
+                        'page': target.get('page')
                     }
                     tasks.append(task_spec)
         runner = CrawlerRunner(crawler_config, tasks, arguments.daemon)

@@ -1,8 +1,10 @@
 # coding: utf-8
 from enum import Enum
+import re
 
 
 DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36 Edg/87.0.664.75'
+EXCLUDED_LEAGUES = re.compile(r'([丙丁戊][級組]|U20|U1|特定15分鐘|夢幻對壘|預備|後備|沙灘|室內|友誼賽|土庫曼青年聯賽|蒲隆地共和國超級聯賽|保加利亞乙|烏克蘭聯賽U21|印度果阿超級聯賽|愛沙尼亞乙|烏茲別克|哈薩克|澳洲西方超級聯賽- 女子|馬拉威 TNM 超級聯賽|津巴布韋超級聯賽|立陶宛乙|中華台北甲|總入球|特別投注|角球|罰牌|分鐘)')
 
 
 class Source(Enum):
@@ -113,12 +115,14 @@ class TX:
         EVENT_RED_CARD_HOME = 'i_RedCardA_1'
         EVENT_RED_CARD_AWAY = 'i_RedCardB_1'
         # 讓分
+        SPREAD_FULL_CLOSE = 'b_IsOpenRF_1'
         SPREAD_ADVANCED_TEAM = 'i_RRF3_1'
         SPREAD_LINE = 's_RFPK0_1'
         SPREAD_OTHER_ADVANCED_TEAM = 's_RFPK1_1'
         SPREAD_LINE_OTHER_VALUE = 's_RFPK2_1'
         SPREAD_HOME = 'dbl_RF_Y_PL_1'
         SPREAD_AWAY = 'dbl_RF_Z_PL_1'
+        SPREAD_1ST_CLOSE = 'b_IsOpenRF_2'
         SPREAD_1ST_ADVANCED_TEAM = 'i_RRF3_2'
         SPREAD_1ST_LINE = 's_RFPK0_2'
         SPREAD_1ST_OTHER_ADVANCED_TEAM = 's_RFPK1_2'
@@ -126,31 +130,39 @@ class TX:
         SPREAD_1ST_HOME = 'dbl_RF_Y_PL_2'
         SPREAD_1ST_AWAY = 'dbl_RF_Z_PL_2'
         # 大小
+        TOTAL_FULL_CLOSE = 'b_IsOpenDX_1'
         TOTAL_LINE = 's_DXPK0_1'
         TOTAL_LINE_SIGN = 's_DXPK1_1'
         TOTAL_LINE_OTHER_VALUE = 's_DXPK2_1'
         TOTAL_OVER = 'dbl_DX_D_PL_1'
         TOTAL_UNDER = 'dbl_DX_X_PL_1'
+        TOTAL_1ST_CLOSE = 'b_IsOpenDX_2'
         TOTAL_1ST_LINE = 's_DXPK0_2'
         TOTAL_1ST_LINE_SIGN = 's_DXPK1_2'
         TOTAL_1ST_LINE_OTHER_VALUE = 's_DXPK2_2'
         TOTAL_1ST_OVER = 'dbl_DX_X_PL_2'
         TOTAL_1ST_UNDER = 'dbl_DX_D_PL_2'
         # 獨贏
+        MONEY_LINE_FULL_CLOSE = 'b_IsOpenDY_1'
         MONEY_LINE_HOME = 'dbl_DY_Y_PL_1'
         MONEY_LINE_AWAY = 'dbl_DY_Z_PL_1'
         MONEY_LINE_DRAW = 'dbl_DY_H_PL_1'
+        MONEY_LINE_1ST_CLOSE = 'b_IsOpenDY_2'
         MONEY_LINE_1ST_HOME = 'dbl_DY_Y_PL_2'
         MONEY_LINE_1ST_AWAY = 'dbl_DY_Z_PL_2'
         MONEY_LINE_1ST_DRAW = 'dbl_DY_H_PL_2'
         # 讓分一輸二贏
+        ESRE_FULL_CLOSE = 'b_IsOpenYSEY_1'
         ESRE_HOME = 'dbl_YSEY_Y_PL_1'
         ESRE_AWAY = 'dbl_YSEY_Z_PL_1'
+        ESRE_1ST_CLOSE = 'b_IsOpenYSEY_2'
         ESRE_1ST_HOME = 'dbl_YSEY_Y_PL_2'
         ESRE_1ST_AWAY = 'dbl_YSEY_Z_PL_2'
         # 單雙
+        PARITY_FULL_CLOSE = 'b_IsOpenDS_1'
         PARITY_ODD = 'dbl_DS_S_PL_1'
         PARITY_EVEN = 'dbl_DS_D_PL_1'
+        PARITY_1ST_CLOSE = 'b_IsOpenDS_2'
         PARITY_1ST_ODD = 'dbl_DS_S_PL_2'
         PARITY_1ST_EVEN = 'dbl_DS_D_PL_2'
         # 額外盤口
