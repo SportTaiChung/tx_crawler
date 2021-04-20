@@ -133,7 +133,9 @@ class TXCrawler:
         self.logger.info('開始更新資料')
         session = None
         while self._config['_running']:
-            if not session or self.account_banned or self.site_maintaining:
+            if not session or ((self.account_banned or self.site_maintaining)
+                               and self.next_relogin_time < datetime.now()
+                               and self.relogin_count < 5):
                 sessions = await self.init_session()
                 session = sessions[0]
                 if not session:
@@ -471,7 +473,7 @@ class TXCrawler:
                             return events
                         if alert_info.get(TX.Key.ALERT_TYPE) == TX.Value.LOGOUT_TYPE and alert_info.get(TX.Key.IS_LOGOUT) == 'True':
                             alert_id = alert_info.get(TX.Key.LOGOUT_TYPE_ID)
-                            if alert_id in TX.Value.LOGOUT_ALERT_IDS and self.relogin_count < 10:
+                            if alert_id in TX.Value.LOGOUT_ALERT_IDS and self.relogin_count < 5:
                                 await self.relogin(session)
                             elif alert_id in TX.Value.BANNED_ALERT_IDS:
                                 self.account_banned = True
@@ -486,13 +488,11 @@ class TXCrawler:
                                 extra={'step': 'crawl_data'})
                         else:
                             await self.logger.error(f'可能被被登出，回應: {json.dumps(alert_info, ensure_ascii=False)}', extra={'step': 'crawl_data'})
-                        if (
-                            (not self.account_banned or not self.site_maintaining)
-                            or ((self.account_banned or self.site_maintaining)
-                                and self.next_relogin_time < datetime.now())
-                        ) and self.relogin_count < 10:
+                        if (self.account_banned or self.site_maintaining
+                            ) and self.next_relogin_time < datetime.now(
+                            ) and self.relogin_count < 5:
                             await self.relogin(session)
-                        elif self.relogin_count >= 10:
+                        elif self.relogin_count >= 5:
                             await self.logger.error('重新登入次數過多，請確認爬蟲狀態，並手動重啟', extra={'step': 'crawl_data'})
                             self.next_relogin_time = datetime.now() + timedelta(hours=3)
                             self.relogin_count = 0
