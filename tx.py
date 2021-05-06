@@ -133,9 +133,7 @@ class TXCrawler:
         self.logger.info('開始更新資料')
         session = None
         while self._config['_running']:
-            if not session or ((self.account_banned or self.site_maintaining)
-                               and self.next_relogin_time < datetime.now()
-                               and self.relogin_count < 5):
+            if not session or self.account_banned or self.site_maintaining:
                 sessions = await self.init_session()
                 session = sessions[0]
                 if not session:
@@ -225,7 +223,7 @@ class TXCrawler:
         success_urls = []
         for site_url in site_urls:
             try:
-                async with session.get(site_url) as resp:
+                async with session.get(site_url, ssl=False) as resp:
                     if resp.status == 200:
                         success_urls.append(site_url)
                     else:
@@ -239,17 +237,17 @@ class TXCrawler:
     async def login(self, session, success_domains, account, password):
         form = {
             'txtUser': account,
-            'txtPassword': self.password_hash(password),
-            'screenSize': '1920*1080'
+            'txtPassword': self.password_hash(password.casefold()),
+            'screenSize': ''
         }
         random.shuffle(success_domains)
         for domain in success_domains:
-            home_resp = await session.get(f'{domain}/Index.aspx', headers=self._config['login_headers'])
+            home_resp = await session.get(f'{domain}/Index.aspx', ssl=False)
             if home_resp.status == 200:
                 async with session.post(
                         f'{domain}/{self._config["api_path"]["login"]}',
                         data=form,
-                        headers=self._config['login_headers']) as login_resp:
+                        headers=self._config['login_headers'], ssl=False) as login_resp:
                     body = await login_resp.text()
                     if login_resp.status == 200:
                         try:
@@ -306,7 +304,7 @@ class TXCrawler:
         async with session.post(
                 f'{session_info["visited_domain"]}/{self._config["api_path"]["logout"]}',
                 data=form,
-                headers=self._config['login_headers']) as logout_resp:
+                headers=self._config['login_headers'], ssl=False) as logout_resp:
             if not logout_resp.ok:
                 await self.logger.warning(f'登出失敗，狀態碼: {logout_resp.status}，域名: {session_info["visited_domain"]}')
 
@@ -321,7 +319,7 @@ class TXCrawler:
         verify_key = None
         async with session.get(
                 f'{session_info["logined_domain"]}/{self._config["api_path"]["redirect_selection"]}',
-                headers=self._config['login_headers']) as site_select_resp:
+                headers=self._config['login_headers'], ssl=False) as site_select_resp:
             body = await site_select_resp.text()
             match = re.search(r'verify=([\w\d._-]+)&', body)
             if match:
@@ -336,7 +334,7 @@ class TXCrawler:
             "_": str(random.random())
         }
         available_redirect_sites = []
-        async with session.post(f'{session_info["logined_domain"]}/{self._config["api_path"]["availalbe_redirect_sites"]}', data=form) as redirect_sites_resp:
+        async with session.post(f'{session_info["logined_domain"]}/{self._config["api_path"]["availalbe_redirect_sites"]}', data=form, ssl=False) as redirect_sites_resp:
             if redirect_sites_resp.ok:
                 raw_resp_text = await redirect_sites_resp.text()
                 try:
@@ -354,7 +352,7 @@ class TXCrawler:
                 'ismobile': 1,
                 'homeUrl': referer
             }
-            async with session.get(f'{fast_domain}/{self._config["api_path"]["redirect_destination"]}', data=form) as redirect_resp:
+            async with session.get(f'{fast_domain}/{self._config["api_path"]["redirect_destination"]}', data=form, ssl=False) as redirect_resp:
                 if redirect_resp.status == 200 and self._config['api_path']['bet_site_home'] in str(redirect_resp.url):
                     session_info['logined_domain'] = fast_domain
                     return True
@@ -366,7 +364,7 @@ class TXCrawler:
         for domain in accessible_domains:
             start_time = loop.time()
             try:
-                async with session.get(f'{domain}speed.ashx?sjs={random.random()}') as site_resp:
+                async with session.get(f'{domain}speed.ashx?sjs={random.random()}', ssl=False) as site_resp:
                     if site_resp.ok:
                         end_time = loop.time()
                         domain_speed_test.append({
@@ -385,7 +383,7 @@ class TXCrawler:
     async def query_sport_info(self, session):
         # 取得九州各球種賽事統計
         session_info = self._session_login_info_map[session]
-        async with session.get(f'{session_info["logined_domain"]}/{self._config["api_path"]["sport_info"]}') as sport_info_resp:
+        async with session.get(f'{session_info["logined_domain"]}/{self._config["api_path"]["sport_info"]}', ssl=False) as sport_info_resp:
             if not sport_info_resp.ok:
                 await self.logger.error(f'登入驗證失敗，無法存取球種資訊列表，{sport_info_resp.status}，訊息: {await sport_info_resp.text()}')
             else:
@@ -445,7 +443,7 @@ class TXCrawler:
             if self.next_relogin_time > datetime.now():
                 return events
             session_info = self._session_login_info_map[session]
-            async with session.get(f'{session_info["logined_domain"]}/{api_url}', data=form) as api_resp:
+            async with session.get(f'{session_info["logined_domain"]}/{api_url}', data=form, ssl=False) as api_resp:
                 if api_resp.status == 200:
                     encrypted_data = await api_resp.text()
                     encrypted_parts = encrypted_data.split('〄')
@@ -473,7 +471,7 @@ class TXCrawler:
                             return events
                         if alert_info.get(TX.Key.ALERT_TYPE) == TX.Value.LOGOUT_TYPE and alert_info.get(TX.Key.IS_LOGOUT) == 'True':
                             alert_id = alert_info.get(TX.Key.LOGOUT_TYPE_ID)
-                            if alert_id in TX.Value.LOGOUT_ALERT_IDS and self.relogin_count < 5:
+                            if alert_id in TX.Value.LOGOUT_ALERT_IDS and self.relogin_count < 10:
                                 await self.relogin(session)
                             elif alert_id in TX.Value.BANNED_ALERT_IDS:
                                 self.account_banned = True
@@ -488,11 +486,13 @@ class TXCrawler:
                                 extra={'step': 'crawl_data'})
                         else:
                             await self.logger.error(f'可能被被登出，回應: {json.dumps(alert_info, ensure_ascii=False)}', extra={'step': 'crawl_data'})
-                        if (self.account_banned or self.site_maintaining
-                            ) and self.next_relogin_time < datetime.now(
-                            ) and self.relogin_count < 5:
+                        if (
+                            (not self.account_banned or not self.site_maintaining)
+                            or ((self.account_banned or self.site_maintaining)
+                                and self.next_relogin_time < datetime.now())
+                        ) and self.relogin_count < 10:
                             await self.relogin(session)
-                        elif self.relogin_count >= 5:
+                        elif self.relogin_count >= 10:
                             await self.logger.error('重新登入次數過多，請確認爬蟲狀態，並手動重啟', extra={'step': 'crawl_data'})
                             self.next_relogin_time = datetime.now() + timedelta(hours=3)
                             self.relogin_count = 0

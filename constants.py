@@ -110,6 +110,7 @@ class TX:
         EVENT_ID = 's_ZbMatchID'
         EVENT_ID_GP = 's_GPID'
         EVENT_ID_1 = 's_ID_1'
+        EVENT_PERIOD = 's_GameStatus'
         EVENT_SCORE_HOME = 's_RZJZF'
         EVENT_SCORE_AWAY = 's_RYJZF'
         EVENT_RED_CARD_HOME = 'i_RedCardA_1'
@@ -140,8 +141,8 @@ class TX:
         TOTAL_1ST_LINE = 's_DXPK0_2'
         TOTAL_1ST_LINE_SIGN = 's_DXPK1_2'
         TOTAL_1ST_LINE_OTHER_VALUE = 's_DXPK2_2'
-        TOTAL_1ST_OVER = 'dbl_DX_X_PL_2'
-        TOTAL_1ST_UNDER = 'dbl_DX_D_PL_2'
+        TOTAL_1ST_OVER = 'dbl_DX_D_PL_2'
+        TOTAL_1ST_UNDER = 'dbl_DX_X_PL_2'
         # 獨贏
         MONEY_LINE_FULL_CLOSE = 'b_IsOpenDY_1'
         MONEY_LINE_HOME = 'dbl_DY_Y_PL_1'
@@ -173,8 +174,8 @@ class TX:
         FIRST_GOAL_HOME = 'dbl_QSF_Y_PL_1'
         FIRST_GOAL_AWAY = 'dbl_QSF_Z_PL_1'
         # 搶尾
-        LAST_GOAL_HOME = 'dbl_QWF_Y_PL_1'
-        LAST_GOAL_AWAY = 'dbl_QWF_Z_PL_1'
+        LAST_GOAL_HOME = 'dbl_QWF_Z_PL_1'
+        LAST_GOAL_AWAY = 'dbl_QWF_Y_PL_1'
         # 單節最高分
         SINGLE_SET_HIGHEST_SCORE_HOME = 'dbl_DJZG_Y_PL_1'
         SINGLE_SET_HIGHEST_SCORE_AWAY = 'dbl_DJZG_Z_PL_1'
@@ -331,6 +332,8 @@ class TX:
             SPECIAL_15_MIN = '10'  # 特定15分
             FULL_FIRST_HALF = '11'  # 單式，全場、上半場
             SET = '12'  # 單節
+            ONE_TO_THREE_SET = '13' # 1~3局
+            ONE_TO_SEVEN_SET = '14' # 1~7局
             TEAM_TOTAL = '15'
             PINGPONG_VOLLEYBALL_SET = '20'
             TENNIS_SET = '21'
@@ -449,6 +452,8 @@ class Mapping:
         '15min': TX.Value.Scene.SPECIAL_15_MIN,  # 特定15分
         'full': TX.Value.Scene.FULL_FIRST_HALF,  # 單式，全場、上半場
         'set': TX.Value.Scene.SET,  # 單節
+        'set_1_3': TX.Value.Scene.ONE_TO_THREE_SET,
+        'set_1_7': TX.Value.Scene.ONE_TO_SEVEN_SET,
         'tennis_set': TX.Value.Scene.TENNIS_SET,
         'pingpong_volleyball_set': TX.Value.Scene.PINGPONG_VOLLEYBALL_SET,
         'team total': TX.Value.Scene.TEAM_TOTAL,
