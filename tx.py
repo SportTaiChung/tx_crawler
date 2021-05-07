@@ -76,7 +76,6 @@ class TXCrawler:
         self.step_log_json = {}
         self.mq_connection_pool = None
         self.mq_channel_pool = None
-        self.logined_sessions = []
         self.execution_id = None
         self.last_execution_time = datetime.now()
         self.task_failed = False
@@ -135,8 +134,9 @@ class TXCrawler:
         while self._config['_running']:
             if not session or self.account_banned or self.site_maintaining:
                 sessions = await self.init_session()
-                session = sessions[0]
-                if not session:
+                if sessions:
+                    session = sessions[0]
+                else:
                     await self.logger.error('登入失敗，休眠5分鐘')
                     await asyncio.sleep(300)
             self.task_failed = False
@@ -647,6 +647,8 @@ class TXCrawler:
 
         contest_parsing_error_count = 0
         event_proto_list = []
+        lst_score = raw_data.get(TX.Key.PERIOD_SCORE)
+        period_score_map = self.parse_period_scores(lst_score)
         timestamp_pattern = re.compile(r'/Date\((\d+)\)/')
         for event_json in raw_data[event_list_key]:
             try:
@@ -664,7 +666,8 @@ class TXCrawler:
                 event.source_updatetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
                 event.live = 'true' if event_json[TX.Key.LIVE_TYPE] == '2' else 'false'
                 event_play_time = str(int(event_json[TX.Key.EVENT_LIVE_TIME]))
-                event.live_time = self.get_live_time(event_json[TX.Key.EVENT_LIVE_PERIOD], event_play_time)
+                period_score = period_score_map.get(event_json[TX.Key.EVENT_SPORT_CODE], {}).get(event_json[TX.Key.EVENT_ID_GP])
+                event.live_time = self.get_live_time(event_json[TX.Key.EVENT_LIVE_PERIOD], event_play_time, period_score)
                 event_info = protobuf_spec.information()
                 league_names = event_json[TX.Key.EVENT_LEAGUE_NAME_WITH_POSTFIX].split('||')
                 self.add_league_postfix(league_names, sport_name, event_json)
@@ -690,10 +693,11 @@ class TXCrawler:
                         )
                     )
                 else:
+                    home_score, away_score = self.get_period_score(period_score)
                     event.score.CopyFrom(
                         protobuf_spec.score(
-                            home=event_json[TX.Key.EVENT_SCORE_HOME] or '0',
-                            away=event_json[TX.Key.EVENT_SCORE_AWAY] or '0'
+                            home=home_score or event_json[TX.Key.EVENT_SCORE_HOME],
+                            away=away_score or event_json[TX.Key.EVENT_SCORE_AWAY] 
                         )
                     )
                 event.redcard.CopyFrom(
@@ -912,8 +916,37 @@ class TXCrawler:
     def modify_game_id(self, game_id, sport_name):
         prefix = Mapping.game_id_prefix.get(sport_name, '')
         return f'{prefix}{game_id}'
+    
+    def parse_period_scores(self, lst_score):
+        period_map = {}
+        if not lst_score:
+            return {}
+        num_pattern = re.compile(r'(\d+)')
+        for scores_by_sport in lst_score:
+            sport_type = scores_by_sport.get(TX.Key.PERIOD_SCORE_BALL_TYPE)
+            sport_period_map = {}
+            scores = scores_by_sport.get(TX.Key.PERIOD_SCORE_LIST, [])
+            if not scores:
+                continue
+            for score in scores:
+                try:
+                    event_period_id = num_pattern.search(score.get(TX.Key.EVENT_PERIOD_ID)).group(1)
+                    period_type = Mapping.period_id.get(score.get(TX.Key.EVENT_PERIOD), TX.Value.PeriodId.NOT_START)
+                    sport_period_map[event_period_id] = {
+                        'period': Mapping.period_name[period_type],
+                        'period_code': score.get(TX.Key.EVENT_PERIOD),
+                        'time': score.get(TX.Key.PERIOD_TIME),
+                        'home_sum': score.get(TX.Key.HOME_PERIOD_SCORE_SUM),
+                        'home_scores': score.get(TX.Key.HOME_PERIOD_SCORES, '').split(','),
+                        'away_sum': score.get(TX.Key.AWAY_PERIOD_SCORE_SUM),
+                        'away_scores': score.get(TX.Key.AWAY_PERIOD_SCORES, '').split(',')
+                    }
+                except AttributeError:
+                    pass
+            period_map[sport_type] = sport_period_map
+        return period_map
 
-    def get_live_time(self, live_period, time_str):
+    def get_live_time(self, live_period, time_str, period_score):
         if live_period:
             live_period = int(live_period)
         if live_period == TX.Value.LivePeriod.NOT_START.value:
@@ -924,7 +957,36 @@ class TXCrawler:
             return f'{Mapping.live_time_prefix[TX.Value.LivePeriod.SECOND_HALF]} {time_str}'
         elif live_period == TX.Value.LivePeriod.INTERMISSION.value:
             return Mapping.live_time_prefix[TX.Value.LivePeriod.INTERMISSION]
+        elif period_score:
+            period = period_score.get('period', 0)
+            if period_score.get('time') != '中場休息':
+                return f'{period} {period_score["time"]}'
         return '0'
+    
+    def get_period_score(self, score_map):
+        home_score = '0'
+        away_score = '0'
+        if score_map:
+            try:
+                period_code = score_map.get('period_code', 0)
+                if period_code == '21':
+                    home_score = score_map['home_scores'][0]
+                    away_score = score_map['away_scores'][0]
+                elif period_code == '22':
+                    home_score = score_map['home_scores'][1]
+                    away_score = score_map['away_scores'][1]
+                elif period_code == '23':
+                    home_score = score_map['home_scores'][2]
+                    away_score = score_map['away_scores'][2]
+                elif period_code == '24':
+                    home_score = score_map['home_scores'][3]
+                    away_score = score_map['away_scores'][3]
+                else:
+                    home_score = score_map['home_sum']
+                    away_score = score_map['away_sum']
+            except (KeyError, IndexError):
+                pass
+        return home_score, away_score
 
     def add_league_postfix(self, league_names, sport_name, event_json):
         if sport_name in ('網球', '排球', '乒乓球'):
@@ -1325,7 +1387,6 @@ class TXCrawler:
                 exchange_name = Mapping.exchange_name[game_type]
                 if self._config['env'] != 'production':
                     exchange_name = self._config['test_exchange']
-                print(exchange_name)
                 async with self.mq_channel_pool.acquire() as channel:
                     exchange = await channel.get_exchange(exchange_name)
                     await exchange.publish(

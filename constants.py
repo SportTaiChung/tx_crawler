@@ -98,6 +98,7 @@ class TX:
         TOTAL_EVENT_COUNT = 'Count'
         # event keys
         EVENT_SPORT_TYPE = 's_BallSx'
+        EVENT_SPORT_CODE = 's_BallSxName'
         EVENT_SPORT_NAME = 's_BallName'
         EVENT_LIVE = 'isOpenLivePlay'
         EVENT_LIVE_PERIOD = 's_ZQMidfielder'
@@ -110,7 +111,17 @@ class TX:
         EVENT_ID = 's_ZbMatchID'
         EVENT_ID_GP = 's_GPID'
         EVENT_ID_1 = 's_ID_1'
+        # 分節、分場比分
+        PERIOD_SCORE = 'lstScore'
+        PERIOD_SCORE_BALL_TYPE = 'sBallSx'
+        PERIOD_SCORE_LIST = 'ScoreData'
         EVENT_PERIOD = 's_GameStatus'
+        PERIOD_TIME = 's_RemainingTime'
+        EVENT_PERIOD_ID = 's_Gpdm'
+        HOME_PERIOD_SCORE_SUM = 's_ScoreA'
+        AWAY_PERIOD_SCORE_SUM = 's_ScoreB'
+        HOME_PERIOD_SCORES = 's_RunsA'
+        AWAY_PERIOD_SCORES = 's_RunsB'
         EVENT_SCORE_HOME = 's_RZJZF'
         EVENT_SCORE_AWAY = 's_RYJZF'
         EVENT_RED_CARD_HOME = 'i_RedCardA_1'
@@ -378,6 +389,16 @@ class TX:
             FIRST_HALF = 1
             SECOND_HALF = 2
             INTERMISSION = 3
+        
+        class PeriodId(Enum):
+            NOT_START = '0'
+            HALF_TIME_REST = '1'
+            FIRST_HALF = '11'
+            SECOND_HALF = '12'
+            FIRST_SET = '21'
+            SECOND_SET = '22'
+            THIRD_SET = '23'
+            FORTH_SET = '24'
 
 
 class Mapping:
@@ -596,6 +617,26 @@ class Mapping:
         TX.Value.LivePeriod.FIRST_HALF: '上',
         TX.Value.LivePeriod.SECOND_HALF: '下',
         TX.Value.LivePeriod.INTERMISSION: '中場'
+    }
+    period_name = {
+        TX.Value.PeriodId.NOT_START: '0',
+        TX.Value.PeriodId.HALF_TIME_REST: '中場',
+        TX.Value.PeriodId.FIRST_HALF: '上半場',
+        TX.Value.PeriodId.SECOND_HALF: '下半場',
+        TX.Value.PeriodId.FIRST_SET: 'Q1',
+        TX.Value.PeriodId.SECOND_SET: 'Q2',
+        TX.Value.PeriodId.THIRD_SET: 'Q3',
+        TX.Value.PeriodId.FORTH_SET: 'Q4'
+    }
+    period_id = {
+        '0': TX.Value.PeriodId.NOT_START,
+        '1': TX.Value.PeriodId.HALF_TIME_REST,
+        '11': TX.Value.PeriodId.FIRST_HALF,
+        '12': TX.Value.PeriodId.SECOND_HALF,
+        '21': TX.Value.PeriodId.FIRST_SET,
+        '22': TX.Value.PeriodId.SECOND_SET,
+        '23': TX.Value.PeriodId.THIRD_SET,
+        '24': TX.Value.PeriodId.FORTH_SET
     }
     event_list_key = {
         'pd': TX.Key.CORRECT_SCORE_EVENT_LIST,
