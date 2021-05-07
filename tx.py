@@ -156,7 +156,7 @@ class TXCrawler:
             if self._config['dump']:
                 with open(f'{self.name}.bin', mode='wb') as f:
                     f.write(data.SerializeToString())
-            await self.upload_data(data)
+            # await self.upload_data(data)
             total_execution_time = (datetime.now() - self.last_execution_time).total_seconds()
             await self.logger.info('任務結束', extra={'step': 'total', 'total_process_time': total_execution_time, 'execution_id': self.execution_id})
             if not self.task_failed:
@@ -443,12 +443,17 @@ class TXCrawler:
             if self.next_relogin_time > datetime.now():
                 return events
             session_info = self._session_login_info_map[session]
+            start_query_time = datetime.now()
             async with session.get(f'{session_info["logined_domain"]}/{api_url}', data=form, ssl=False) as api_resp:
+                end_query_time = datetime.now()
                 if api_resp.status == 200:
                     encrypted_data = await api_resp.text()
                     encrypted_parts = encrypted_data.split('〄')
                     if len(encrypted_parts) == 4:
                         data = self.decrypt_data(encrypted_parts)
+                        end_decryption_time = datetime.now()
+                        self.step_log_json['query_time'] = str(end_query_time - start_query_time)
+                        self.step_log_json['decryption_time'] = str(end_decryption_time - end_query_time)
                         if not data:
                             await self.logger.error(f'不支援的解密類型: {encrypted_parts[TX.Pos.Encryption.TYPE]}', extra={'step': 'crawl_data'})
                         else:
@@ -1064,8 +1069,8 @@ class TXCrawler:
                     sign = '-' if int(event_json[TX.Key.SPREAD_OTHER_ADVANCED_TEAM]) > 1 else '+'
                     line_value = f'{sign}{event_json[TX.Key.SPREAD_LINE_OTHER_VALUE]}'
                     spread_line = self._compute_other_line(spread_line, line_value)
-                home_odds = event_json[TX.Key.SPREAD_HOME]
-                away_odds = event_json[TX.Key.SPREAD_AWAY]
+                home_odds = self.get_ods(event_json[TX.Key.SPREAD_HOME])
+                away_odds = self.get_ods(event_json[TX.Key.SPREAD_AWAY])
         elif period is Period.FIRST_HALF and event_json[TX.Key.SPREAD_1ST_CLOSE]:
             spread_line = event_json[TX.Key.SPREAD_1ST_LINE]
             advanced_team = event_json[TX.Key.SPREAD_1ST_ADVANCED_TEAM]
@@ -1078,8 +1083,8 @@ class TXCrawler:
                     sign = '-' if int(event_json[TX.Key.SPREAD_1ST_OTHER_ADVANCED_TEAM]) > 1 else '+'
                     line_value = f'{sign}{event_json[TX.Key.SPREAD_1ST_LINE_OTHER_VALUE]}'
                     spread_line = self._compute_other_line(spread_line, line_value)
-                home_odds = event_json[TX.Key.SPREAD_1ST_HOME]
-                away_odds = event_json[TX.Key.SPREAD_1ST_AWAY]
+                home_odds = self.get_odds(event_json[TX.Key.SPREAD_1ST_HOME])
+                away_odds = self.get_odds(event_json[TX.Key.SPREAD_1ST_AWAY])
         if not spread_line:
             spread_line = '-0'
         home_line, away_line = self._line_add_sign(spread_line, advanced_team)
@@ -1146,8 +1151,8 @@ class TXCrawler:
                         sign = '-' if int(sign_value) > 1 else '+'
                         line_value = f'{sign}{event_json[TX.Key.TOTAL_LINE_OTHER_VALUE]}'
                         total_line = self._compute_other_line(total_line, line_value)
-                over = event_json[TX.Key.TOTAL_OVER]
-                under = event_json[TX.Key.TOTAL_UNDER]
+                over = self.get_odds(event_json[TX.Key.TOTAL_OVER])
+                under = self.get_odds(event_json[TX.Key.TOTAL_UNDER])
         elif period is Period.FIRST_HALF and event_json[TX.Key.TOTAL_1ST_CLOSE]:
             total_line = event_json[TX.Key.TOTAL_1ST_LINE] or ''
             if total_line:
@@ -1161,8 +1166,8 @@ class TXCrawler:
                         sign = '-' if int(sign_value) > 1 else '+'
                         line_value = f'{sign}{event_json[TX.Key.TOTAL_1ST_LINE_OTHER_VALUE]}'
                         total_line = self._compute_other_line(total_line, line_value)
-                over = event_json[TX.Key.TOTAL_1ST_OVER]
-                under = event_json[TX.Key.TOTAL_1ST_UNDER]
+                over = self.get_odds(event_json[TX.Key.TOTAL_1ST_OVER])
+                under = self.get_odds(event_json[TX.Key.TOTAL_1ST_UNDER])
         if total_line and total_line[-2:] == '.5' and '/' not in total_line:
             total_line = f'{total_line[:-2]}-100'
         elif not total_line:
@@ -1178,13 +1183,13 @@ class TXCrawler:
     def extract_money_line(self, event_json, period):
         if period is Period.FULL and event_json[TX.Key.MONEY_LINE_FULL_CLOSE]:
             return protobuf_spec.onetwo(
-                home=str(event_json.get(TX.Key.MONEY_LINE_HOME, 0)),
-                away=str(event_json.get(TX.Key.MONEY_LINE_AWAY, 0))
+                home=str(self.get_odds(event_json.get(TX.Key.MONEY_LINE_HOME, 0))),
+                away=str(self.get_odds(event_json.get(TX.Key.MONEY_LINE_AWAY, 0)))
             ), event_json.get(TX.Key.MONEY_LINE_DRAW, '0')
         elif period is Period.FIRST_HALF and event_json[TX.Key.MONEY_LINE_1ST_CLOSE]:
             return protobuf_spec.onetwo(
-                home=str(event_json.get(TX.Key.MONEY_LINE_HOME, 0)),
-                away=str(event_json.get(TX.Key.MONEY_LINE_AWAY, 0))
+                home=str(self.get_odds(event_json.get(TX.Key.MONEY_LINE_HOME, 0))),
+                away=str(self.get_odds(event_json.get(TX.Key.MONEY_LINE_AWAY, 0)))
             ), event_json.get(TX.Key.MONEY_LINE_DRAW, '0')
         return protobuf_spec.onetwo(), ''
 
@@ -1195,106 +1200,106 @@ class TXCrawler:
                 advanced_team = protobuf_spec.whichTeam.away
             return protobuf_spec.Esre(
                 let=advanced_team,
-                home=str(event_json.get(TX.Key.ESRE_HOME, '0')),
-                away=str(event_json.get(TX.Key.ESRE_AWAY, '0'))
+                home=str(self.get_odds(event_json.get(TX.Key.ESRE_HOME, '0'))),
+                away=str(self.get_odds(event_json.get(TX.Key.ESRE_AWAY, '0')))
             )
         elif period is Period.FIRST_HALF and event_json[TX.Key.ESRE_1ST_CLOSE]:
             if event_json.get(TX.Key.SPREAD_1ST_ADVANCED_TEAM) == TX.Value.AdvancedTeam.AWAY.value:
                 advanced_team = protobuf_spec.whichTeam.away
             return protobuf_spec.Esre(
                 let=advanced_team,
-                home=str(event_json.get(TX.Key.ESRE_1ST_HOME, '0')),
-                away=str(event_json.get(TX.Key.ESRE_1ST_AWAY, '0'))
+                home=str(self.get_odds(event_json.get(TX.Key.ESRE_1ST_HOME, '0'))),
+                away=str(self.get_odds(event_json.get(TX.Key.ESRE_1ST_AWAY, '0')))
             )
         return protobuf_spec.Esre(let=advanced_team, home='0', away='0')
 
     def extract_parity(self, event_json, period):
         if period is Period.FULL and event_json[TX.Key.PARITY_FULL_CLOSE]:
-            odd = str(event_json.get(TX.Key.PARITY_ODD, 0))
-            even = str(event_json.get(TX.Key.PARITY_EVEN, 0))
+            odd = str(self.get_odds(event_json.get(TX.Key.PARITY_ODD, 0)))
+            even = str(self.get_odds(event_json.get(TX.Key.PARITY_EVEN, 0)))
             if odd[0] != '-' and even[0] != '-':
                 return protobuf_spec.onetwo(
                     home=odd,
                     away=even
                 )
         elif period is Period.FIRST_HALF and event_json[TX.Key.PARITY_1ST_CLOSE]:
-            odd = str(event_json.get(TX.Key.PARITY_1ST_ODD, 0))
-            even = str(event_json.get(TX.Key.PARITY_1ST_EVEN, 0))
+            odd = str(self.get_odds(event_json.get(TX.Key.PARITY_1ST_ODD, 0)))
+            even = str(self.get_odds(event_json.get(TX.Key.PARITY_1ST_EVEN, 0)))
             if odd[0] != '-' and even[0] != '-':
                 return protobuf_spec.onetwo(
                     home=odd,
                     away=even
                 )
         return protobuf_spec.onetwo(home='0', away='0')
-
+    
     def extract_basketball_special_handicap(self, event_json):
         # 搶首
         first_goal = protobuf_spec.twZF(
             homeZF=protobuf_spec.typeZF(
                 line='',
-                odds=str(event_json[TX.Key.FIRST_GOAL_HOME]),
+                odds=str(self.get_odds(event_json[TX.Key.FIRST_GOAL_HOME])),
             ),
             awayZF=protobuf_spec.typeZF(
                 line='',
-                odds=str(event_json[TX.Key.FIRST_GOAL_AWAY])
+                odds=str(self.get_odds(event_json[TX.Key.FIRST_GOAL_AWAY]))
             )
         )
         # 搶尾
         last_goal = protobuf_spec.typeDS(
             line='',
-            over=str(event_json[TX.Key.LAST_GOAL_HOME]),
-            under=str(event_json[TX.Key.LAST_GOAL_AWAY])
+            over=str(self.get_odds(event_json[TX.Key.LAST_GOAL_HOME])),
+            under=str(self.get_odds(event_json[TX.Key.LAST_GOAL_AWAY]))
         )
         # 單節最高分
         single_set_highest = protobuf_spec.onetwo(
-            home=str(event_json[TX.Key.SINGLE_SET_HIGHEST_SCORE_HOME]),
-            away=str(event_json[TX.Key.SINGLE_SET_HIGHEST_SCORE_AWAY])
+            home=str(self.get_odds(event_json[TX.Key.SINGLE_SET_HIGHEST_SCORE_HOME])),
+            away=str(self.get_odds(event_json[TX.Key.SINGLE_SET_HIGHEST_SCORE_AWAY]))
         )
         return first_goal, last_goal, single_set_highest
 
     def extract_correct_score(self, event_json):
         correct_score = {f'{home}-{away}': '0' for home, away in product([0, 1, 2, 3, 4], repeat=2)}
         if event_json.get(TX.Key.CORRECT_SCORE_1_0) is not None:
-            correct_score['1-0'] = str(event_json[TX.Key.CORRECT_SCORE_1_0])
-            correct_score['2-0'] = str(event_json[TX.Key.CORRECT_SCORE_2_0])
-            correct_score['2-1'] = str(event_json[TX.Key.CORRECT_SCORE_2_1])
-            correct_score['3-0'] = str(event_json[TX.Key.CORRECT_SCORE_3_0])
-            correct_score['3-1'] = str(event_json[TX.Key.CORRECT_SCORE_3_1])
-            correct_score['3-2'] = str(event_json[TX.Key.CORRECT_SCORE_3_2])
-            correct_score['4-0'] = str(event_json[TX.Key.CORRECT_SCORE_4_0])
-            correct_score['4-1'] = str(event_json[TX.Key.CORRECT_SCORE_4_1])
-            correct_score['4-2'] = str(event_json[TX.Key.CORRECT_SCORE_4_2])
-            correct_score['4-3'] = str(event_json[TX.Key.CORRECT_SCORE_4_3])
-            correct_score['0-1'] = str(event_json[TX.Key.CORRECT_SCORE_0_1])
-            correct_score['0-2'] = str(event_json[TX.Key.CORRECT_SCORE_0_2])
-            correct_score['1-2'] = str(event_json[TX.Key.CORRECT_SCORE_1_2])
-            correct_score['0-3'] = str(event_json[TX.Key.CORRECT_SCORE_0_3])
-            correct_score['1-3'] = str(event_json[TX.Key.CORRECT_SCORE_1_3])
-            correct_score['2-3'] = str(event_json[TX.Key.CORRECT_SCORE_2_3])
-            correct_score['0-4'] = str(event_json[TX.Key.CORRECT_SCORE_0_4])
-            correct_score['1-4'] = str(event_json[TX.Key.CORRECT_SCORE_1_4])
-            correct_score['2-4'] = str(event_json[TX.Key.CORRECT_SCORE_2_4])
-            correct_score['3-4'] = str(event_json[TX.Key.CORRECT_SCORE_3_4])
-            correct_score['0-0'] = str(event_json[TX.Key.CORRECT_SCORE_0_0])
-            correct_score['1-1'] = str(event_json[TX.Key.CORRECT_SCORE_1_1])
-            correct_score['2-2'] = str(event_json[TX.Key.CORRECT_SCORE_2_2])
-            correct_score['3-3'] = str(event_json[TX.Key.CORRECT_SCORE_3_3])
-            correct_score['4-4'] = str(event_json[TX.Key.CORRECT_SCORE_4_4])
-            correct_score['other'] = str(event_json[TX.Key.CORRECT_SCORE_OTHER])
+            correct_score['1-0'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_1_0]))
+            correct_score['2-0'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_2_0]))
+            correct_score['2-1'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_2_1]))
+            correct_score['3-0'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_3_0]))
+            correct_score['3-1'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_3_1]))
+            correct_score['3-2'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_3_2]))
+            correct_score['4-0'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_4_0]))
+            correct_score['4-1'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_4_1]))
+            correct_score['4-2'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_4_2]))
+            correct_score['4-3'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_4_3]))
+            correct_score['0-1'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_0_1]))
+            correct_score['0-2'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_0_2]))
+            correct_score['1-2'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_1_2]))
+            correct_score['0-3'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_0_3]))
+            correct_score['1-3'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_1_3]))
+            correct_score['2-3'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_2_3]))
+            correct_score['0-4'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_0_4]))
+            correct_score['1-4'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_1_4]))
+            correct_score['2-4'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_2_4]))
+            correct_score['3-4'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_3_4]))
+            correct_score['0-0'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_0_0]))
+            correct_score['1-1'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_1_1]))
+            correct_score['2-2'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_2_2]))
+            correct_score['3-3'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_3_3]))
+            correct_score['4-4'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_4_4]))
+            correct_score['other'] = str(self.get_odds(event_json[TX.Key.CORRECT_SCORE_OTHER]))
         return json.dumps(correct_score)
 
     def extract_half_full_score(self, event_json):
         half_full_score = {f'{first}{full}': '0' for first, full in product(['H', 'D', 'A'], repeat=2)}
         if event_json.get(TX.Key.HALF_FULL_SCORE_HH) is not None:
-            half_full_score['HH'] = str(event_json[TX.Key.HALF_FULL_SCORE_HH])
-            half_full_score['HD'] = str(event_json[TX.Key.HALF_FULL_SCORE_HD])
-            half_full_score['HA'] = str(event_json[TX.Key.HALF_FULL_SCORE_HA])
-            half_full_score['DH'] = str(event_json[TX.Key.HALF_FULL_SCORE_DH])
-            half_full_score['DD'] = str(event_json[TX.Key.HALF_FULL_SCORE_DD])
-            half_full_score['DA'] = str(event_json[TX.Key.HALF_FULL_SCORE_DA])
-            half_full_score['AH'] = str(event_json[TX.Key.HALF_FULL_SCORE_AH])
-            half_full_score['AD'] = str(event_json[TX.Key.HALF_FULL_SCORE_AD])
-            half_full_score['AA'] = str(event_json[TX.Key.HALF_FULL_SCORE_AA])
+            half_full_score['HH'] = str(self.get_odds(event_json[TX.Key.HALF_FULL_SCORE_HH]))
+            half_full_score['HD'] = str(self.get_odds(event_json[TX.Key.HALF_FULL_SCORE_HD]))
+            half_full_score['HA'] = str(self.get_odds(event_json[TX.Key.HALF_FULL_SCORE_HA]))
+            half_full_score['DH'] = str(self.get_odds(event_json[TX.Key.HALF_FULL_SCORE_DH]))
+            half_full_score['DD'] = str(self.get_odds(event_json[TX.Key.HALF_FULL_SCORE_DD]))
+            half_full_score['DA'] = str(self.get_odds(event_json[TX.Key.HALF_FULL_SCORE_DA]))
+            half_full_score['AH'] = str(self.get_odds(event_json[TX.Key.HALF_FULL_SCORE_AH]))
+            half_full_score['AD'] = str(self.get_odds(event_json[TX.Key.HALF_FULL_SCORE_AD]))
+            half_full_score['AA'] = str(self.get_odds(event_json[TX.Key.HALF_FULL_SCORE_AA]))
         return json.dumps(half_full_score)
 
     def extract_score_sum(self, event_json, period):
@@ -1305,15 +1310,15 @@ class TXCrawler:
             '7+': '0',
         }
         if period is Period.FULL:
-            score_sum['0-1'] = str(event_json[TX.Key.SCORE_SUM_0_1])
-            score_sum['2-3'] = str(event_json[TX.Key.SCORE_SUM_2_3])
-            score_sum['4-6'] = str(event_json[TX.Key.SCORE_SUM_4_6])
-            score_sum['7+'] = str(event_json[TX.Key.SCORE_SUM_7_ABOVE])
+            score_sum['0-1'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_0_1]))
+            score_sum['2-3'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_2_3]))
+            score_sum['4-6'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_4_6]))
+            score_sum['7+'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_7_ABOVE]))
         elif period is Period.FIRST_HALF:
-            score_sum['0-1'] = str(event_json[TX.Key.SCORE_SUM_1ST_0_1])
-            score_sum['2-3'] = str(event_json[TX.Key.SCORE_SUM_1ST_2_3])
-            score_sum['4-6'] = str(event_json[TX.Key.SCORE_SUM_1ST_4_6])
-            score_sum['7+'] = str(event_json[TX.Key.SCORE_SUM_1ST_7_ABOVE])
+            score_sum['0-1'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_1ST_0_1]))
+            score_sum['2-3'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_1ST_2_3]))
+            score_sum['4-6'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_1ST_4_6]))
+            score_sum['7+'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_1ST_7_ABOVE]))
         return json.dumps(score_sum)
 
     def convert_game_type(self, event_json):
@@ -1346,6 +1351,10 @@ class TXCrawler:
             elif scene == 8:
                 game_type_id = 10
         return game_type_id
+
+    def get_odds(self, odds):
+        # 賠率為負時關盤
+        return odds if odds > 0 else 0
 
     def reverse_odds(self, spread, money_line, esre):
         # 讓分
