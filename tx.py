@@ -701,8 +701,8 @@ class TXCrawler:
                     home_score, away_score = self.get_period_score(period_score)
                     event.score.CopyFrom(
                         protobuf_spec.score(
-                            home=home_score or event_json[TX.Key.EVENT_SCORE_HOME],
-                            away=away_score or event_json[TX.Key.EVENT_SCORE_AWAY] 
+                            home=home_score or event_json[TX.Key.EVENT_SCORE_HOME] or '0',
+                            away=away_score or event_json[TX.Key.EVENT_SCORE_AWAY] or '0'
                         )
                     )
                 event.redcard.CopyFrom(
@@ -969,8 +969,8 @@ class TXCrawler:
         return '0'
     
     def get_period_score(self, score_map):
-        home_score = '0'
-        away_score = '0'
+        home_score = ''
+        away_score = ''
         if score_map:
             try:
                 period_code = score_map.get('period_code', 0)
