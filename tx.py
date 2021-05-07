@@ -1069,8 +1069,8 @@ class TXCrawler:
                     sign = '-' if int(event_json[TX.Key.SPREAD_OTHER_ADVANCED_TEAM]) > 1 else '+'
                     line_value = f'{sign}{event_json[TX.Key.SPREAD_LINE_OTHER_VALUE]}'
                     spread_line = self._compute_other_line(spread_line, line_value)
-                home_odds = self.get_ods(event_json[TX.Key.SPREAD_HOME])
-                away_odds = self.get_ods(event_json[TX.Key.SPREAD_AWAY])
+                home_odds = self.get_odds(event_json[TX.Key.SPREAD_HOME])
+                away_odds = self.get_odds(event_json[TX.Key.SPREAD_AWAY])
         elif period is Period.FIRST_HALF and event_json[TX.Key.SPREAD_1ST_CLOSE]:
             spread_line = event_json[TX.Key.SPREAD_1ST_LINE]
             advanced_team = event_json[TX.Key.SPREAD_1ST_ADVANCED_TEAM]
