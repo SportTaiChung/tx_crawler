@@ -698,7 +698,7 @@ class TXCrawler:
                         )
                     )
                 else:
-                    home_score, away_score = self.get_period_score(period_score)
+                    home_score, away_score = self.get_period_score(period_score, event_json[TX.Key.FULL_1ST_TYPE])
                     event.score.CopyFrom(
                         protobuf_spec.score(
                             home=home_score or event_json[TX.Key.EVENT_SCORE_HOME] or '0',
@@ -968,22 +968,22 @@ class TXCrawler:
                 return f'{period} {period_score["time"]}'
         return '0'
     
-    def get_period_score(self, score_map):
+    def get_period_score(self, score_map, period_num):
         home_score = ''
         away_score = ''
         if score_map:
             try:
                 period_code = score_map.get('period_code', 0)
-                if period_code == '21':
+                if period_code == '21' and period_num == '11':
                     home_score = score_map['home_scores'][0]
                     away_score = score_map['away_scores'][0]
-                elif period_code == '22':
+                elif period_code == '22' and period_num == '12':
                     home_score = score_map['home_scores'][1]
                     away_score = score_map['away_scores'][1]
-                elif period_code == '23':
+                elif period_code == '23' and period_num == '13':
                     home_score = score_map['home_scores'][2]
                     away_score = score_map['away_scores'][2]
-                elif period_code == '24':
+                elif period_code == '24' and period_num == '14':
                     home_score = score_map['home_scores'][3]
                     away_score = score_map['away_scores'][3]
                 else:
