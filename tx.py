@@ -148,7 +148,7 @@ class TXCrawler:
                 raw_data = await self.crawl_data(session)
                 if self._config['dump']:
                     with open(f'{self.name}.json', mode='w') as f:
-                        f.write(json.dumps(raw_data, ensure_ascii=False))
+                        f.write(json.dumps(raw_data, indent=4, ensure_ascii=False))
             data = await self.parsing_and_mapping(raw_data)
             if self._config['dump']:
                 with open(f'{self.name}.log', mode='w') as f:
@@ -698,7 +698,7 @@ class TXCrawler:
                         )
                     )
                 else:
-                    home_score, away_score = self.get_period_score(period_score, event_json[TX.Key.FULL_1ST_TYPE])
+                    home_score, away_score = self.get_period_score(period_score, event_info.league)
                     event.score.CopyFrom(
                         protobuf_spec.score(
                             home=home_score or event_json[TX.Key.EVENT_SCORE_HOME] or '0',
@@ -936,16 +936,28 @@ class TXCrawler:
             for score in scores:
                 try:
                     event_period_id = num_pattern.search(score.get(TX.Key.EVENT_PERIOD_ID)).group(1)
+                    reverse = score.get(TX.Key.EVENT_PERIOD_ID, '').startswith('lq')
                     period_type = Mapping.period_id.get(score.get(TX.Key.EVENT_PERIOD), TX.Value.PeriodId.NOT_START)
-                    sport_period_map[event_period_id] = {
-                        'period': Mapping.period_name[period_type],
-                        'period_code': score.get(TX.Key.EVENT_PERIOD),
-                        'time': score.get(TX.Key.PERIOD_TIME),
-                        'home_sum': score.get(TX.Key.HOME_PERIOD_SCORE_SUM),
-                        'home_scores': score.get(TX.Key.HOME_PERIOD_SCORES, '').split(','),
-                        'away_sum': score.get(TX.Key.AWAY_PERIOD_SCORE_SUM),
-                        'away_scores': score.get(TX.Key.AWAY_PERIOD_SCORES, '').split(',')
-                    }
+                    if not reverse:
+                        sport_period_map[event_period_id] = {
+                            'period': Mapping.period_name[period_type],
+                            'period_code': score.get(TX.Key.EVENT_PERIOD),
+                            'time': score.get(TX.Key.PERIOD_TIME),
+                            'home_sum': score.get(TX.Key.HOME_PERIOD_SCORE_SUM),
+                            'home_scores': score.get(TX.Key.HOME_PERIOD_SCORES, '').split(','),
+                            'away_sum': score.get(TX.Key.AWAY_PERIOD_SCORE_SUM),
+                            'away_scores': score.get(TX.Key.AWAY_PERIOD_SCORES, '').split(',')
+                        }
+                    else:
+                        sport_period_map[event_period_id] = {
+                            'period': Mapping.period_name[period_type],
+                            'period_code': score.get(TX.Key.EVENT_PERIOD),
+                            'time': score.get(TX.Key.PERIOD_TIME),
+                            'home_sum': score.get(TX.Key.AWAY_PERIOD_SCORE_SUM),
+                            'home_scores': score.get(TX.Key.AWAY_PERIOD_SCORES, '').split(','),
+                            'away_sum': score.get(TX.Key.HOME_PERIOD_SCORE_SUM),
+                            'away_scores': score.get(TX.Key.HOME_PERIOD_SCORES, '').split(',')
+                        }
                 except AttributeError:
                     pass
             period_map[sport_type] = sport_period_map
@@ -968,22 +980,22 @@ class TXCrawler:
                 return f'{period} {period_score["time"]}'
         return '0'
     
-    def get_period_score(self, score_map, period_num):
+    def get_period_score(self, score_map, league_name):
         home_score = ''
         away_score = ''
         if score_map:
             try:
                 period_code = score_map.get('period_code', 0)
-                if period_code == '21' and period_num == '11':
+                if period_code == '21' and '第一節' in league_name:
                     home_score = score_map['home_scores'][0]
                     away_score = score_map['away_scores'][0]
-                elif period_code == '22' and period_num == '12':
+                elif period_code == '22' and '第二節' in league_name:
                     home_score = score_map['home_scores'][1]
                     away_score = score_map['away_scores'][1]
-                elif period_code == '23' and period_num == '13':
+                elif period_code == '23' and '第三節' in league_name:
                     home_score = score_map['home_scores'][2]
                     away_score = score_map['away_scores'][2]
-                elif period_code == '24' and period_num == '14':
+                elif period_code == '24' and '第四節' in league_name:
                     home_score = score_map['home_scores'][3]
                     away_score = score_map['away_scores'][3]
                 else:
