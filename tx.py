@@ -72,6 +72,7 @@ class TXCrawler:
         super().__init__()
         self._tasks = tasks
         self.task_spec = None
+        self.name = tasks[0]['crawler_name']
         self._config = secrets
         self.logger = None
         self._logger_factory = None
