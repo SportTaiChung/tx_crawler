@@ -29,6 +29,7 @@ supervisor = "*"
 opencc = "==0.2"
 xxtea-py = "*"
 cffi = "*"
+aiogram = "*"
 
 [requires]
 python_version = "3.8"

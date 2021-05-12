@@ -6,6 +6,7 @@ ps38 crawler
 import asyncio
 from json.decoder import JSONDecodeError
 import os
+from urllib.parse import urlencode
 from datetime import datetime, timedelta
 import logging
 import uuid
@@ -13,7 +14,7 @@ import random
 from functools import wraps
 from itertools import cycle, product
 import traceback
-from time import time
+from time import perf_counter, time
 from math import floor, hypot
 from copy import deepcopy
 from hashlib import md5
@@ -56,7 +57,7 @@ def step_logger(step_name):
             self.step_log_json['process_time'] = round(process_time, 3)
             failed_continue_1_min = self.last_success_time - datetime.now() > timedelta(minutes=1)
             if (self.task_failed and failed_continue_1_min) or self.step_log_json.get('exception') or self.step_log_json.get('error'):
-                await self.logger.error(f"{self.name} 任務失敗", extra=self.step_log_json)
+                await self.logger.error(f"{self.account} {self.name} 任務失敗", extra=self.step_log_json)
             else:
                 await self.logger.info('成功', extra=self.step_log_json)
             return result
@@ -84,6 +85,7 @@ class TXCrawler:
         self._session = None
         self._session_info = None
         self.account_banned = False
+        self.account = ''
         self.relogin_count = 0
         self.next_relogin_time = datetime.now()
         self.site_maintaining = False
@@ -124,7 +126,6 @@ class TXCrawler:
                     sessions = await self.init_session(cookies=cookies)
             if self._config.get('env') == 'production':
                 telegram_handler = AsyncTelegramHandler(
-                    session=session,
                     config=self._config,
                     level=logging.ERROR
                 )
@@ -137,7 +138,9 @@ class TXCrawler:
                 if sessions:
                     session = sessions[0]
                 else:
-                    await self.logger.error('登入失敗，休眠5分鐘')
+                    await self.logger.error(f'{self.account} {self.name} 登入失敗，休眠5分鐘')
+                    if self._config.get('auto_change_ip'):
+                        os.system(self._config['change_ip_command'])
                     await asyncio.sleep(300)
             self.task_failed = False
             self.execution_id = str(uuid.uuid4()).replace('-', '')
@@ -150,27 +153,25 @@ class TXCrawler:
                     with open(f'{self.name}.json', mode='w') as f:
                         f.write(json.dumps(raw_data, indent=4, ensure_ascii=False))
             data = await self.parsing_and_mapping(raw_data)
-            if self._config['dump']:
+            if self._config['dump'] and data:
                 with open(f'{self.name}.log', mode='w') as f:
                     f.write(text_format.MessageToString(data, as_utf8=True))
-            if self._config['dump']:
+            if self._config['dump'] and data:
                 with open(f'{self.name}.bin', mode='wb') as f:
                     f.write(data.SerializeToString())
-            await self.upload_data(data)
+            # await self.upload_data(data)
             total_execution_time = (datetime.now() - self.last_execution_time).total_seconds()
             await self.logger.info('任務結束', extra={'step': 'total', 'total_process_time': total_execution_time, 'execution_id': self.execution_id})
             if not self.task_failed:
                 self.last_success_time = datetime.now()
             self.last_execution_time = datetime.now()
             await asyncio.sleep(self._config['sleep'])
-        if not self._config['debug']:
-            if not self._config['read_from_file']:
-                await self.logout(sessions[0])
-                await session.close()
+        if not self._config['read_from_file']:
+            await self.logout(sessions[0])
         else:
             with open('saved_sessions.pickle', 'wb') as session_file:
                 pickle.dump(list(map(lambda s: dict(s._cookie_jar._cookies), sessions)), session_file, pickle.HIGHEST_PROTOCOL)
-            await session.close()
+        await session.close()
         await self.logger.info('停止爬蟲')
 
     async def init_mq(self):
@@ -211,10 +212,13 @@ class TXCrawler:
             domains = await self.test_site_domains(session)
             if domains:
                 if await self.login(session, domains, account, account_info['password']):
+                    self.account = account
                     if await self.redirect_bet_site(session):
                         self._sport_info = await self.query_sport_info(session)
                         if TX.Key.SPORT_EVENT_INFO in self._sport_info:
                             sessions.append(session)
+            if session not in sessions:
+                await session.close()
         return sessions
 
     async def test_site_domains(self, session):
@@ -223,7 +227,7 @@ class TXCrawler:
         success_urls = []
         for site_url in site_urls:
             try:
-                async with session.get(site_url, ssl=False) as resp:
+                async with session.get(site_url) as resp:
                     if resp.status == 200:
                         success_urls.append(site_url)
                     else:
@@ -242,12 +246,12 @@ class TXCrawler:
         }
         random.shuffle(success_domains)
         for domain in success_domains:
-            home_resp = await session.get(f'{domain}/Index.aspx', ssl=False)
+            home_resp = await session.get(f'{domain}/Index.aspx')
             if home_resp.status == 200:
                 async with session.post(
                         f'{domain}/{self._config["api_path"]["login"]}',
                         data=form,
-                        headers=self._config['login_headers'], ssl=False) as login_resp:
+                        headers=self._config['login_headers']) as login_resp:
                     body = await login_resp.text()
                     if login_resp.status == 200:
                         try:
@@ -283,13 +287,13 @@ class TXCrawler:
         domains = await self.test_site_domains(session)
         login_success = await self.login(session, domains, list(self._config['accounts'].keys())[0], list(self._config['accounts'].values())[0]['password'])
         if not login_success:
-            await self.logger.error('重新登入失敗', extra={'step': 'crawl_data'})
+            await self.logger.error(f'{self.account} {self.name} 重新登入失敗', extra={'step': 'crawl_data'})
         elif await self.redirect_bet_site(session):
             self._sport_info = await self.query_sport_info(session)
             if TX.Key.SPORT_EVENT_INFO in self._sport_info:
                 await self.logger.info('重新登入成功', extra={'step': 'crawl_data'})
         else:
-            await self.logger.error('重新登入有問題，無法取得資料', extra={'step': 'crawl_data'})
+            await self.logger.error(f'{self.account} {self.name} 重新登入有問題，無法取得資料', extra={'step': 'crawl_data'})
 
     def password_hash(self, password):
         md5_hash = md5(password.encode('utf-8')).hexdigest()
@@ -304,7 +308,7 @@ class TXCrawler:
         async with session.post(
                 f'{session_info["visited_domain"]}/{self._config["api_path"]["logout"]}',
                 data=form,
-                headers=self._config['login_headers'], ssl=False) as logout_resp:
+                headers=self._config['login_headers']) as logout_resp:
             if not logout_resp.ok:
                 await self.logger.warning(f'登出失敗，狀態碼: {logout_resp.status}，域名: {session_info["visited_domain"]}')
 
@@ -319,7 +323,7 @@ class TXCrawler:
         verify_key = None
         async with session.get(
                 f'{session_info["logined_domain"]}/{self._config["api_path"]["redirect_selection"]}',
-                headers=self._config['login_headers'], ssl=False) as site_select_resp:
+                headers=self._config['login_headers']) as site_select_resp:
             body = await site_select_resp.text()
             match = re.search(r'verify=([\w\d._-]+)&', body)
             if match:
@@ -334,25 +338,26 @@ class TXCrawler:
             "_": str(random.random())
         }
         available_redirect_sites = []
-        async with session.post(f'{session_info["logined_domain"]}/{self._config["api_path"]["availalbe_redirect_sites"]}', data=form, ssl=False) as redirect_sites_resp:
+        async with session.post(f'{session_info["logined_domain"]}/{self._config["api_path"]["availalbe_redirect_sites"]}', data=form) as redirect_sites_resp:
             if redirect_sites_resp.ok:
                 raw_resp_text = await redirect_sites_resp.text()
                 try:
                     available_redirect_sites = json.loads(raw_resp_text)
                 except json.decoder.JSONDecodeError:
-                    await self.logger.error(f'解析資料錯誤: {raw_resp_text}')
+                    await self.logger.error(f'{self.account} {self.name} 解析資料錯誤')
+                    await self.logger.warning(f'解析資料錯誤: {raw_resp_text}')
             else:
-                await self.logger.error('無法取得重新導向網址')
+                await self.logger.error('{self.account} {self.name} 無法取得重新導向網址')
         if verify_key:
             fast_domain = await self.select_fast_url(session, available_redirect_sites)
             referer = re.search(r'https?:(//[\w\d._-]+)', session_info['logined_domain']).group(1)
             form = {
                 'user': session_info['account'],
                 'verify': verify_key,
-                'ismobile': 1,
+                'ismobile': 'False',
                 'homeUrl': referer
             }
-            async with session.get(f'{fast_domain}/{self._config["api_path"]["redirect_destination"]}', data=form, ssl=False) as redirect_resp:
+            async with session.get(f'{fast_domain}/{self._config["api_path"]["redirect_destination"]}?{urlencode(form)}') as redirect_resp:
                 if redirect_resp.status == 200 and self._config['api_path']['bet_site_home'] in str(redirect_resp.url):
                     session_info['logined_domain'] = fast_domain
                     return True
@@ -364,28 +369,29 @@ class TXCrawler:
         for domain in accessible_domains:
             start_time = loop.time()
             try:
-                async with session.get(f'{domain}speed.ashx?sjs={random.random()}', ssl=False) as site_resp:
+                async with session.get(f'{domain}speed.ashx?sjs={random.random()}') as site_resp:
                     if site_resp.ok:
                         end_time = loop.time()
                         domain_speed_test.append({
                             'domain': domain,
                             'response_time': end_time - start_time
                         })
-            except aiohttp.client_exceptions.ClientResponseError as ex:
+            except (aiohttp.client_exceptions.ClientResponseError, aiohttp.client_exceptions.ClientConnectorCertificateError) as ex:
                 await self.logger.warning(f'無法解析回應資料: {ex}')
         fastest_domain = None
         if domain_speed_test:
             fastest_domain = min(domain_speed_test, key=lambda d: d['response_time'])['domain']
         else:
             await self.logger.warning(f'無法存取網站: {accessible_domains}')
-        return fastest_domain
+        return re.sub(r'/$', '', fastest_domain)
 
     async def query_sport_info(self, session):
         # 取得九州各球種賽事統計
         session_info = self._session_login_info_map[session]
-        async with session.get(f'{session_info["logined_domain"]}/{self._config["api_path"]["sport_info"]}', ssl=False) as sport_info_resp:
+        async with session.get(f'{session_info["logined_domain"]}/{self._config["api_path"]["sport_info"]}') as sport_info_resp:
             if not sport_info_resp.ok:
-                await self.logger.error(f'登入驗證失敗，無法存取球種資訊列表，{sport_info_resp.status}，訊息: {await sport_info_resp.text()}')
+                await self.logger.error(f'{self.account} {self.name} 登入驗證失敗，無法存取球種資訊列表，{sport_info_resp.status}')
+                await self.logger.warning(f'登入驗證失敗，無法存取球種資訊列表，{sport_info_resp.status}，訊息: {await sport_info_resp.text()}')
             else:
                 raw_text = await sport_info_resp.text()
                 try:
@@ -443,19 +449,19 @@ class TXCrawler:
             if self.next_relogin_time > datetime.now():
                 return events
             session_info = self._session_login_info_map[session]
-            start_query_time = datetime.now()
-            async with session.get(f'{session_info["logined_domain"]}/{api_url}', data=form, ssl=False) as api_resp:
-                end_query_time = datetime.now()
+            start_query_time = perf_counter()
+            async with session.get(f'{session_info["logined_domain"]}/{api_url}?{urlencode(form)}') as api_resp:
+                end_query_time = perf_counter()
                 if api_resp.status == 200:
                     encrypted_data = await api_resp.text()
                     encrypted_parts = encrypted_data.split('〄')
                     if len(encrypted_parts) == 4:
                         data = self.decrypt_data(encrypted_parts)
-                        end_decryption_time = datetime.now()
+                        end_decryption_time = perf_counter()
                         self.step_log_json['query_time'] = str(end_query_time - start_query_time)
                         self.step_log_json['decryption_time'] = str(end_decryption_time - end_query_time)
                         if not data:
-                            await self.logger.error(f'不支援的解密類型: {encrypted_parts[TX.Pos.Encryption.TYPE]}', extra={'step': 'crawl_data'})
+                            await self.logger.error(f'{self.account} {self.name} 不支援的解密類型: {encrypted_parts[TX.Pos.Encryption.TYPE]}', extra={'step': 'crawl_data'})
                         else:
                             self.account_banned = False
                             self.site_maintaining = False
@@ -464,14 +470,16 @@ class TXCrawler:
                             self.step_log_json['total_page'] = self._total_page
                             if not events:
                                 events = data
+                                if TX.Key.EVENT_LIST not in data:
+                                    await self.logger.warning('異常盤口資料: %s' % json.dumps(data), extra={'step': 'crawl_data'})
                             else:
-                                events[TX.Key.EVENT_LIST].extend(data.get(TX.Key.EVENT_LIST, []))
+                                events[TX.Key.EVENT_LIST].extend(data.get(TX.Key.EVENT_LIST) or [])
                             await asyncio.sleep(self._config['crawl_interval'])
                     else:
                         try:
                             alert_info = json.loads(encrypted_data)
                         except JSONDecodeError:
-                            await self.logger.error(f'不支援的資料格式，資料長度: {len(encrypted_data)}，資料尾部: {encrypted_data[-200:]}', extra={'step': 'crawl_data'})
+                            await self.logger.error(f'{self.account} {self.name} 不支援的資料格式，資料長度: {len(encrypted_data)}，資料尾部: {encrypted_data[-200:]}', extra={'step': 'crawl_data'})
                             await self.relogin(session)
                             return events
                         if alert_info.get(TX.Key.ALERT_TYPE) == TX.Value.LOGOUT_TYPE and alert_info.get(TX.Key.IS_LOGOUT) == 'True':
@@ -487,10 +495,10 @@ class TXCrawler:
                                 if self.next_relogin_time - datetime.now() < timedelta(minutes=30):
                                     self.next_relogin_time = datetime.now() + timedelta(minutes=30)
                             await self.logger.error(
-                                f'已被登出，原因: {Mapping.logout_code.get(alert_info.get(TX.Key.LOGOUT_TYPE_ID), "未知")}，回應: {json.dumps(alert_info, ensure_ascii=False)}',
+                                f'{self.account} {self.name} 已被登出，原因: {Mapping.logout_code.get(alert_info.get(TX.Key.LOGOUT_TYPE_ID), "未知")}，回應: {json.dumps(alert_info, ensure_ascii=False)}',
                                 extra={'step': 'crawl_data'})
                         else:
-                            await self.logger.error(f'可能被被登出，回應: {json.dumps(alert_info, ensure_ascii=False)}', extra={'step': 'crawl_data'})
+                            await self.logger.error(f'{self.account} {self.name} 可能被被登出，回應: {json.dumps(alert_info, ensure_ascii=False)}', extra={'step': 'crawl_data'})
                         if (
                             (not self.account_banned or not self.site_maintaining)
                             or ((self.account_banned or self.site_maintaining)
@@ -498,11 +506,11 @@ class TXCrawler:
                         ) and self.relogin_count < 10:
                             await self.relogin(session)
                         elif self.relogin_count >= 10:
-                            await self.logger.error('重新登入次數過多，請確認爬蟲狀態，並手動重啟', extra={'step': 'crawl_data'})
+                            await self.logger.error(f'{self.account} {self.name} 重新登入次數過多，請確認爬蟲狀態，並手動重啟', extra={'step': 'crawl_data'})
                             self.next_relogin_time = datetime.now() + timedelta(hours=3)
                             self.relogin_count = 0
                 else:
-                    await self.logger.error(f'請求資料失敗，狀態碼:{api_resp.status}，headers: {api_resp.headers}', extra={'step': 'crawl_data'})
+                    await self.logger.error(f'{self.account} {self.name} 請求資料失敗，狀態碼:{api_resp.status}，headers: {api_resp.headers}', extra={'step': 'crawl_data'})
         return events
 
     def decrypt_data(self, encrypted_parts):
@@ -902,7 +910,7 @@ class TXCrawler:
                 await self.logger.warning('映射失敗資料: %s' % json.dumps(event_json, ensure_ascii=False), extra={'step': 'parsing_and_mapping'})
                 if contest_parsing_error_count > 10:
                     self.task_failed = True
-                    await self.logger.error('解析映射資料失敗10次，請確認資料映射正確性', extra={'step': 'parsing_and_mapping', 'execution_id': self.execution_id})
+                    await self.logger.error(f'{self.account} {self.name} 解析映射資料失敗10次，請確認資料映射正確性', extra={'step': 'parsing_and_mapping', 'execution_id': self.execution_id})
         data.aphdc.extend(event_proto_list)
         return data
 
@@ -1419,5 +1427,5 @@ class TXCrawler:
                 succeed = False
         if not succeed:
             self.task_failed = True
-            await self.logger.error('上傳資料到MQ失敗', extra={'step': 'upload'})
+            await self.logger.error(f'{self.account} {self.name} 上傳資料到MQ失敗', extra={'step': 'upload'})
             self.step_log_json['error'] = '上傳資料到MQ失敗'
