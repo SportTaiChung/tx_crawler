@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 import time
+import json
 from datetime import datetime
 import logging
 import asyncio
-import aiohttp
+from aiogram import Bot
 from typing import Union
 from aiologger.loggers.json import JsonLogger
 from aiologger.utils import CallableWrapper
@@ -23,18 +24,14 @@ class AsyncTelegramHandler(Handler):
 
     def __init__(
         self,
-        session=None,
         config=None,
         level: Union[str, int, LogLevel] = LogLevel.NOTSET,
         formatter: Formatter = None,
         custom_filter: Filter = None
     ) -> None:
         super().__init__()
-        if session is None:
-            session = aiohttp.ClientSession()
-        self.session = session
+        self.bot = Bot(token=config['telegram_token'])
         self.config = config
-        self.send_message_url = f"https://api.telegram.org/bot{config['telegram_token']}/sendMessage"
         self.level = level
         if formatter is None:
             formatter = Formatter()
@@ -45,10 +42,10 @@ class AsyncTelegramHandler(Handler):
         else:
             self.filter = Filter()
         self._initialization_lock = asyncio.Lock()
-
+    
     @property
     def initialized(self):
-        return self.session is not None
+        pass
 
     async def handle(self, record: LogRecord) -> bool:
         rv = self.filter(record)
@@ -57,10 +54,10 @@ class AsyncTelegramHandler(Handler):
         return rv
 
     async def flush(self, message=None):
-        await self.session.post(self.send_message_url, data={
-            'chat_id': self.config['chat_id'],
-            'text': message
-        })
+        await self.bot.send_message(
+            chat_id=self.config['chat_id'],
+            text=message
+        )
 
     async def emit(self, record: LogRecord):
         try:
@@ -70,8 +67,6 @@ class AsyncTelegramHandler(Handler):
             await self.handle_error(record, exc)
 
     async def close(self):
-        if self.session is None:
-            return
         await self.session.close()
 
 

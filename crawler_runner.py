@@ -23,17 +23,13 @@ class CrawlerRunner:
         self._logger_factory = init_logger
 
     def run(self):
-        crawlers = []
         task_info = {}
         self._mq = asyncio.Queue()
-        for task in self._tasks:
-            crawler = TXCrawler(task, self._config)
-            crawler.set_logger_factory(self._logger_factory)
-            crawlers.append(crawler)
-        for crawler in crawlers:
-            crawler_task = self._loop.create_task(crawler.run(None, task_info, self._mq))
-            self._task_coro_id_crawler_map[id(crawler_task)] = crawler
-            self._crawler_tasks.append(crawler_task)
+        crawler = TXCrawler(self._tasks, self._config)
+        crawler.set_logger_factory(self._logger_factory)
+        crawler_task = self._loop.create_task(crawler.run(None, task_info, self._mq))
+        self._task_coro_id_crawler_map[id(crawler_task)] = crawler
+        self._crawler_tasks.append(crawler_task)
         if not self._daemon:
             self._loop.create_task(self.watch_dog_task(stop=True))
         else:

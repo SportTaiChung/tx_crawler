@@ -68,9 +68,10 @@ def step_logger(step_name):
 class TXCrawler:
     """Crawler implementation for ps38"""
 
-    def __init__(self, task_spec, secrets):
+    def __init__(self, tasks, secrets):
         super().__init__()
-        self.task_spec = task_spec
+        self._tasks = tasks
+        self.task_spec = None
         self._config = secrets
         self.logger = None
         self._logger_factory = None
@@ -94,15 +95,14 @@ class TXCrawler:
         self.user_agent = UserAgent(fallback=DEFAULT_USER_AGENT)
         self.headers = self._config['login_headers']
         self._session_login_info_map = {}
-        self.name = self.task_spec['crawler_name']
         self._total_page = 1
         self.data = None
 
     def set_logger_factory(self, logger_factory):
-        self._logger_factory = logger_factory(self.name,
+        self._logger_factory = logger_factory('tx',
                                               extra={
-                                                  'game_type': self.task_spec['game_type'],
-                                                  'play_type': self.task_spec['period']
+                                                  'game_type': self._tasks[0]['game_type'],
+                                                  'play_type': self._tasks[0]['period']
                                               })
 
     async def reset_session(self, session):
@@ -141,33 +141,40 @@ class TXCrawler:
                     await self.logger.error(f'{self.account} {self.name} 登入失敗，休眠5分鐘')
                     if self._config.get('auto_change_ip'):
                         os.system(self._config['change_ip_command'])
+                        await self.logger.error(f'{self.account} {self.name} 自動更換IP')
                     await asyncio.sleep(300)
-            self.task_failed = False
-            self.execution_id = str(uuid.uuid4()).replace('-', '')
-            if self._config['read_from_file']:
-                with open(self._config['read_from_file']) as f:
-                    raw_data = json.load(f)
-            else:
-                raw_data = await self.crawl_data(session)
-                if self._config['dump']:
-                    with open(f'{self.name}.json', mode='w') as f:
-                        f.write(json.dumps(raw_data, indent=4, ensure_ascii=False))
-            data = await self.parsing_and_mapping(raw_data)
-            if self._config['dump'] and data:
-                with open(f'{self.name}.log', mode='w') as f:
-                    f.write(text_format.MessageToString(data, as_utf8=True))
-            if self._config['dump'] and data:
-                with open(f'{self.name}.bin', mode='wb') as f:
-                    f.write(data.SerializeToString())
-            await self.upload_data(data)
-            total_execution_time = (datetime.now() - self.last_execution_time).total_seconds()
-            await self.logger.info('任務結束', extra={'step': 'total', 'total_process_time': total_execution_time, 'execution_id': self.execution_id})
-            if not self.task_failed:
-                self.last_success_time = datetime.now()
-            self.last_execution_time = datetime.now()
-            await asyncio.sleep(self._config['sleep'])
+            for task in self._tasks:
+                self.task_spec = task
+                self.task_failed = False
+                self.name = task['crawler_name']
+                self.logger.extra['name'] = task['crawler_name']
+                self.logger.extra['game_type'] = task['game_type']
+                self.logger.extra['play_type'] = task['period']
+                self.execution_id = str(uuid.uuid4()).replace('-', '')
+                if self._config['read_from_file']:
+                    with open(self._config['read_from_file']) as f:
+                        raw_data = json.load(f)
+                else:
+                    raw_data = await self.crawl_data(session)
+                    if self._config['dump']:
+                        with open(f'{self.name}.json', mode='w') as f:
+                            f.write(json.dumps(raw_data, indent=4, ensure_ascii=False))
+                data = await self.parsing_and_mapping(raw_data)
+                if self._config['dump'] and data:
+                    with open(f'{self.name}.log', mode='w') as f:
+                        f.write(text_format.MessageToString(data, as_utf8=True))
+                if self._config['dump'] and data:
+                    with open(f'{self.name}.bin', mode='wb') as f:
+                        f.write(data.SerializeToString())
+                await self.upload_data(data)
+                total_execution_time = (datetime.now() - self.last_execution_time).total_seconds()
+                await self.logger.info('任務結束', extra={'step': 'total', 'total_process_time': total_execution_time, 'execution_id': self.execution_id})
+                if not self.task_failed:
+                    self.last_success_time = datetime.now()
+                self.last_execution_time = datetime.now()
+                await asyncio.sleep(self._config['sleep'])
         if not self._config['read_from_file']:
-            await self.logout(sessions[0])
+            await self.logout(session)
         else:
             with open('saved_sessions.pickle', 'wb') as session_file:
                 pickle.dump(list(map(lambda s: dict(s._cookie_jar._cookies), sessions)), session_file, pickle.HIGHEST_PROTOCOL)
@@ -211,8 +218,8 @@ class TXCrawler:
                 session.cookie_jar.update_cookies(cookies.pop())
             domains = await self.test_site_domains(session)
             if domains:
+                self.account = account
                 if await self.login(session, domains, account, account_info['password']):
-                    self.account = account
                     if await self.redirect_bet_site(session):
                         self._sport_info = await self.query_sport_info(session)
                         if TX.Key.SPORT_EVENT_INFO in self._sport_info:
@@ -240,7 +247,7 @@ class TXCrawler:
 
     async def login(self, session, success_domains, account, password):
         form = {
-            'txtUser': account,
+            'txtUser': account.casefold(),
             'txtPassword': self.password_hash(password.casefold()),
             'screenSize': ''
         }
@@ -469,9 +476,10 @@ class TXCrawler:
                             self._total_page = self.task_spec.get('page') or data.get(TX.Key.TOTAL_PAGE_NUM, 1) or 1
                             self.step_log_json['total_page'] = self._total_page
                             if not events:
-                                events = data
                                 if TX.Key.EVENT_LIST not in data:
                                     await self.logger.warning('異常盤口資料: %s' % json.dumps(data), extra={'step': 'crawl_data'})
+                                else:
+                                    events = data
                             else:
                                 events[TX.Key.EVENT_LIST].extend(data.get(TX.Key.EVENT_LIST) or [])
                             await asyncio.sleep(self._config['crawl_interval'])
