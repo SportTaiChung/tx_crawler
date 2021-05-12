@@ -159,7 +159,7 @@ class TXCrawler:
             if self._config['dump'] and data:
                 with open(f'{self.name}.bin', mode='wb') as f:
                     f.write(data.SerializeToString())
-            # await self.upload_data(data)
+            await self.upload_data(data)
             total_execution_time = (datetime.now() - self.last_execution_time).total_seconds()
             await self.logger.info('任務結束', extra={'step': 'total', 'total_process_time': total_execution_time, 'execution_id': self.execution_id})
             if not self.task_failed:
