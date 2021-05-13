@@ -167,7 +167,7 @@ class TXCrawler:
                 if self._config['dump'] and data:
                     with open(f'{self.name}.bin', mode='wb') as f:
                         f.write(data.SerializeToString())
-                await self.upload_data(data)
+                # await self.upload_data(data)
                 total_execution_time = (datetime.now() - self.last_execution_time).total_seconds()
                 await self.logger.info('任務結束', extra={'step': 'total', 'total_process_time': total_execution_time, 'execution_id': self.execution_id})
                 if not self.task_failed:
@@ -758,7 +758,9 @@ class TXCrawler:
                 event.game_class = TXCrawler.game_class_convert(game_type, league_names[TX.Pos.Lang.TRADITIONAL_CHINESE])
                 if self.task_spec['period'] in (Period.FULL.value,
                                                 Period.LIVE.value, '2nd',
-                                                'special', 'set', 'tennis_set',
+                                                'special', 'set', 'single_set',
+                                                'tennis_set', 'set_1_3',
+                                                'set_3_7',
                                                 'pingpong_volleyball_set',
                                                 'first_blood', 'kill_hero'):
                     # 全場
@@ -854,7 +856,7 @@ class TXCrawler:
                         event_1st.sd.CopyFrom(parity_1st)
                         event_proto_list.append(event_1st)
                 #搶首尾與單節最高分
-                elif self.task_spec['period'] == 'first_last_point':
+                elif self.task_spec['period'] == ('first_last_point'):
                     event_first_last = protobuf_spec.ApHdc()
                     event_first_last.CopyFrom(event)
                     event_first_last.game_type = Period.MULTI.value
@@ -942,7 +944,7 @@ class TXCrawler:
     def modify_game_id(self, game_id, sport_name):
         prefix = Mapping.game_id_prefix.get(sport_name, '')
         return f'{prefix}{game_id}'
-    
+
     def parse_period_scores(self, lst_score):
         period_map = {}
         if not lst_score:
@@ -1000,7 +1002,7 @@ class TXCrawler:
             if period_score.get('time') != '中場休息':
                 return f'{period} {period_score["time"]}'
         return '0'
-    
+
     def get_period_score(self, score_map, league_name):
         home_score = ''
         away_score = ''
@@ -1264,7 +1266,7 @@ class TXCrawler:
                     away=even
                 )
         return protobuf_spec.onetwo(home='0', away='0')
-    
+
     def extract_basketball_special_handicap(self, event_json):
         # 搶首
         first_goal = protobuf_spec.twZF(
