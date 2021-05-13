@@ -518,6 +518,10 @@ class TXCrawler:
                             await self.logger.error(f'{self.account} {self.name} 重新登入次數過多，請確認爬蟲狀態，並手動重啟', extra={'step': 'crawl_data'})
                             self.next_relogin_time = datetime.now() + timedelta(hours=3)
                             self.relogin_count = 0
+                elif api_resp.status in (599, 429):
+                    self.account_banned = True
+                    self.next_relogin_time = datetime.now() + timedelta(minutes=1)
+                    await self.logger.error(f'{self.account} {self.name} 請求資料過於頻繁，暫時被封', extra={'step': 'crawl_data'})
                 else:
                     await self.logger.error(f'{self.account} {self.name} 請求資料失敗，狀態碼:{api_resp.status}，headers: {api_resp.headers}', extra={'step': 'crawl_data'})
         return events
