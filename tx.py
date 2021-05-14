@@ -758,9 +758,9 @@ class TXCrawler:
                 event.game_class = TXCrawler.game_class_convert(game_type, league_names[TX.Pos.Lang.TRADITIONAL_CHINESE])
                 if self.task_spec['period'] in (Period.FULL.value,
                                                 Period.LIVE.value, '2nd',
-                                                'special', 'set', 'single_set',
-                                                'tennis_set', 'set_1_3',
-                                                'set_3_7',
+                                                'team total', 'special', 'set',
+                                                'single_set', 'tennis_set',
+                                                'set_1_3', 'set_3_7',
                                                 'pingpong_volleyball_set',
                                                 'first_blood', 'kill_hero'):
                     # 全場
