@@ -282,7 +282,7 @@ class TX:
                 return Mapping.sport_type[game_type]
 
         class BallType(Enum):
-            EUROPE_FIVE_SOCCER_LEAGUE = ''
+            EUROPE_FIVE_SOCCER_LEAGUE = 'b_zq'
             SOCCER = 'b_zq'
             SOCCER_CORRECT_SCORE = '4'
             SOCCER_SCORE_SUM = '5'
@@ -316,7 +316,7 @@ class TX:
                 return Mapping.ball_type_id[self]
 
         class BallTypeID(Enum):
-            EUROPE_FIVE_SOCCER_LEAGUE = 'wdls'
+            EUROPE_FIVE_SOCCER_LEAGUE = '10'
             SOCCER = '10'
             BASEBALL = '13'
             BASKETBALL = '6'
