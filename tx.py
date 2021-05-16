@@ -256,35 +256,38 @@ class TXCrawler:
         for domain in success_domains:
             home_resp = await session.get(f'{domain}/Index.aspx')
             if home_resp.status == 200:
-                async with session.post(
-                        f'{domain}/{self._config["api_path"]["login"]}',
-                        data=form,
-                        headers=self._config['login_headers']) as login_resp:
-                    body = await login_resp.text()
-                    if login_resp.status == 200:
-                        try:
-                            data = json.loads(body)
-                            if data.get('Lv') == '尊龍會員':
-                                self._session_login_info_map[session] = {
-                                    'account': account,
-                                    'password': password,
-                                    'visited_domain': domain,
-                                    'logined_domain': domain,
-                                    'success_time': datetime.now()
-                                }
-                                return True
-                            elif data.get('StatusCode') == 404:
-                                await self.logger.warning(f'登入 {domain} 失敗，原因: 鎖區，狀態碼: {login_resp.status}，回應: {body}')
-                            elif '帳號或密碼錯誤' in data.get('msg', ''):
-                                await self.logger.warning(f'登入 {domain} 失敗，原因: 帳密錯誤或是帳號被封，狀態碼: {login_resp.status}，回應: {body}')
-                            else:
-                                await self.logger.warning(f'登入 {domain} 失敗，狀態碼: {login_resp.status}，回應: {body}')
-                        except (json.decoder.JSONDecodeError, TypeError, KeyError):
-                            await self.logger.warning(f'登入 {domain} 失敗，回應: {body}')
-                    elif login_resp.status == 599:
-                        await self.logger.warning(f'登入 {domain} 失敗，原因: 鎖IP，登入頻繁，請稍後再試，狀態碼: {login_resp.status}，回應: {body}')
-                    else:
-                        await self.logger.warning(f'登入 {domain} 失敗，狀態碼: {login_resp.status}，回應: {body}')
+                try:
+                    async with session.post(
+                            f'{domain}/{self._config["api_path"]["login"]}',
+                            data=form,
+                            headers=self._config['login_headers']) as login_resp:
+                        body = await login_resp.text()
+                        if login_resp.status == 200:
+                            try:
+                                data = json.loads(body)
+                                if data.get('Lv') == '尊龍會員':
+                                    self._session_login_info_map[session] = {
+                                        'account': account,
+                                        'password': password,
+                                        'visited_domain': domain,
+                                        'logined_domain': domain,
+                                        'success_time': datetime.now()
+                                    }
+                                    return True
+                                elif data.get('StatusCode') == 404:
+                                    await self.logger.warning(f'登入 {domain} 失敗，原因: 鎖區，狀態碼: {login_resp.status}，回應: {body}')
+                                elif '帳號或密碼錯誤' in data.get('msg', ''):
+                                    await self.logger.warning(f'登入 {domain} 失敗，原因: 帳密錯誤或是帳號被封，狀態碼: {login_resp.status}，回應: {body}')
+                                else:
+                                    await self.logger.warning(f'登入 {domain} 失敗，狀態碼: {login_resp.status}，回應: {body}')
+                            except (json.decoder.JSONDecodeError, TypeError, KeyError):
+                                await self.logger.warning(f'登入 {domain} 失敗，回應: {body}')
+                        elif login_resp.status == 599:
+                            await self.logger.warning(f'登入 {domain} 失敗，原因: 鎖IP，登入頻繁，請稍後再試，狀態碼: {login_resp.status}，回應: {body}')
+                        else:
+                            await self.logger.warning(f'登入 {domain} 失敗，狀態碼: {login_resp.status}，回應: {body}')
+                except aiohttp.client_exceptions.ClientResponseError:
+                    pass
             else:
                 await self.logger.warning(f'登入 {domain} 失敗，原因: 無法連上首頁，狀態碼: {home_resp.status}，回應: {await home_resp.text()}')
         await self.logger.warning(f'登入 {success_domains} 都失敗')
