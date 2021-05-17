@@ -806,6 +806,8 @@ class TXCrawler:
                         event_full.game_type = Period.SECOND_HALF.value
                     elif second_half_pattern.search(event_full.information.league) and event.game_class == GameType.basketball.value:
                         event_full.game_type = Period.SECOND_HALF.value
+                    elif game_type is GameType.baseball and self.task_spec['period'] in ('set_1_3', 'set_1_7'):
+                        event_full.game_type = Period.FIRST_HALF.value
                     else:
                         event_full.game_type = Period.FULL.value
                     event_full.twZF.CopyFrom(spread)
