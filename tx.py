@@ -134,16 +134,16 @@ class TXCrawler:
         self.logger.info('開始更新資料')
         session = None
         while self._config['_running']:
-            if not session or self.account_banned or self.site_maintaining:
-                sessions = await self.init_session()
-                if sessions:
-                    session = sessions[0]
-                else:
-                    await self.logger.error(f'{self.account} {self.name} 登入失敗，休眠5分鐘')
-                    if self._config.get('auto_change_ip'):
-                        os.system(self._config['change_ip_command'])
-                        await self.logger.error(f'{self.account} {self.name} 自動更換IP')
-                    await asyncio.sleep(300)
+            # if not session or self.account_banned or self.site_maintaining:
+            #     sessions = await self.init_session()
+            #     if sessions:
+            #         session = sessions[0]
+            #     else:
+            #         await self.logger.error(f'{self.account} {self.name} 登入失敗，休眠5分鐘')
+            #         if self._config.get('auto_change_ip'):
+            #             os.system(self._config['change_ip_command'])
+            #             await self.logger.error(f'{self.account} {self.name} 自動更換IP')
+            #         await asyncio.sleep(300)
             for task in self._tasks:
                 self.task_spec = task
                 self.task_failed = False
@@ -804,7 +804,7 @@ class TXCrawler:
                             event_full.information.en_league += ' - 4Q'
                     elif self.task_spec['period'] == '2nd':
                         event_full.game_type = Period.SECOND_HALF.value
-                    elif second_half_pattern.search(event_full.information.league):
+                    elif second_half_pattern.search(event_full.information.league) and event.game_class == GameType.basketball.value:
                         event_full.game_type = Period.SECOND_HALF.value
                     else:
                         event_full.game_type = Period.FULL.value
