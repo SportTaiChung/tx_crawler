@@ -6,6 +6,7 @@ import logging
 import asyncio
 from aiogram import Bot
 from typing import Union
+import aiogram
 from aiologger.loggers.json import JsonLogger
 from aiologger.utils import CallableWrapper
 from aiologger.formatters.json import (FUNCTION_NAME_FIELDNAME,
@@ -54,10 +55,13 @@ class AsyncTelegramHandler(Handler):
         return rv
 
     async def flush(self, message=None):
-        await self.bot.send_message(
-            chat_id=self.config['chat_id'],
-            text=message
-        )
+        try:
+            await self.bot.send_message(
+                chat_id=self.config['chat_id'],
+                text=message
+            )
+        except aiogram.exceptions.RetryAfter:
+            pass
 
     async def emit(self, record: LogRecord):
         try:
