@@ -96,7 +96,6 @@ class TXCrawler:
         self.user_agent = UserAgent(fallback=DEFAULT_USER_AGENT)
         self.headers = self._config['login_headers']
         self._session_login_info_map = {}
-        self._total_page = 1
         self.data = None
 
     def set_logger_factory(self, logger_factory):
@@ -415,8 +414,7 @@ class TXCrawler:
     @step_logger('crawl_data')
     async def crawl_data(self, session):
         events = None
-        self._total_page = self.task_spec.get('page') or self._total_page or 1
-        for page_number in range(1, self._total_page + 1):
+        for page_number in range(1, self.task_spec.get('total_page', 1) + 1):
             if self.task_spec.get('page') and self.task_spec.get('page') != page_number:
                 continue
             game_type = self.task_spec['game_type']
@@ -479,8 +477,8 @@ class TXCrawler:
                             self.account_banned = False
                             self.site_maintaining = False
                             self.relogin_count = 0
-                            self._total_page = self.task_spec.get('page') or data.get(TX.Key.TOTAL_PAGE_NUM, 1) or 1
-                            self.step_log_json['total_page'] = self._total_page
+                            self.task_spec['total_page'] = self.task_spec.get('page') or data.get(TX.Key.TOTAL_PAGE_NUM, 1) or 1
+                            self.step_log_json['total_page'] = self.task_spec['total_page']
                             if not events:
                                 if TX.Key.EVENT_LIST not in data:
                                     await self.logger.warning('異常盤口資料: %s' % json.dumps(data), extra={'step': 'crawl_data'})
