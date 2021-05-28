@@ -1230,9 +1230,9 @@ class TXCrawler:
             ), event_json.get(TX.Key.MONEY_LINE_DRAW, '0')
         elif period is Period.FIRST_HALF and event_json[TX.Key.MONEY_LINE_1ST_CLOSE]:
             return protobuf_spec.onetwo(
-                home=str(self.get_odds(event_json.get(TX.Key.MONEY_LINE_HOME, 0))),
-                away=str(self.get_odds(event_json.get(TX.Key.MONEY_LINE_AWAY, 0)))
-            ), event_json.get(TX.Key.MONEY_LINE_DRAW, '0')
+                home=str(self.get_odds(event_json.get(TX.Key.MONEY_LINE_1ST_HOME, 0))),
+                away=str(self.get_odds(event_json.get(TX.Key.MONEY_LINE_1ST_AWAY, 0)))
+            ), event_json.get(TX.Key.MONEY_LINE_1ST_DRAW, '0')
         return protobuf_spec.onetwo(), ''
 
     def extract_esre(self, event_json, period):
