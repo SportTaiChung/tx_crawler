@@ -60,7 +60,7 @@ class AsyncTelegramHandler(Handler):
                 chat_id=self.config['chat_id'],
                 text=message
             )
-        except aiogram.exceptions.RetryAfter:
+        except (aiogram.exceptions.RetryAfter, aiogram.exceptions.NetworkError, asyncio.TimeoutError):
             pass
 
     async def emit(self, record: LogRecord):

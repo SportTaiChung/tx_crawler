@@ -58,6 +58,7 @@ if __name__ == '__main__':
                         'period': target['period'],
                         'category': target['category'],
                         'live': target.get('live', False),
+                        'wdls': target.get('wdls', False),
                         'page': target.get('page')
                     }
                     tasks.append(task_spec)
