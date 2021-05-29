@@ -414,8 +414,9 @@ class TXCrawler:
     @step_logger('crawl_data')
     async def crawl_data(self, session):
         events = None
-        for page_number in range(1, self.task_spec.get('total_page', 1) + 1):
-            if self.task_spec.get('page') and self.task_spec.get('page') != page_number:
+        total_page = self.task_spec.get('total_page') or self.task_spec.get('page') or '1'
+        for page_number in range(1, total_page + 1):
+            if self.task_spec.get('page') != page_number:
                 continue
             game_type = self.task_spec['game_type']
             # sport_type_name = sport_event_info[TX.Key.SPORT_NAME].split('||')[TX.Pos.Lang.TRADITIONAL_CHINESE]
