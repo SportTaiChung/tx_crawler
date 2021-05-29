@@ -416,7 +416,7 @@ class TXCrawler:
         events = None
         total_page = self.task_spec.get('total_page') or self.task_spec.get('page') or 1
         for page_number in range(1, total_page + 1):
-            if self.task_spec.get('page') != page_number:
+            if self.task_spec.get('page') and self.task_spec.get('page') != page_number:
                 continue
             game_type = self.task_spec['game_type']
             # sport_type_name = sport_event_info[TX.Key.SPORT_NAME].split('||')[TX.Pos.Lang.TRADITIONAL_CHINESE]
