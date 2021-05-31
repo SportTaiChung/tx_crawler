@@ -1055,7 +1055,7 @@ class TXCrawler:
         team_b_names = team_b.split('||')
         if 'NBA 2K' in league_name or '電競籃球' in league_name:
             reverse_team = True
-        if not reverse_team or self.task_spec['game_type'] not in (GameType.baseball.value, GameType.basketball.value):
+        if not reverse_team or self.task_spec['game_type'] not in (GameType.baseball.value, GameType.basketball.value, GameType.tennis.value):
             return team_a_names, team_b_names
         return team_b_names, team_a_names
 
