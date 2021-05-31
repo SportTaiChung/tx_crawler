@@ -530,6 +530,10 @@ class Mapping:
             'cn': '-第三盘获胜者',
             'en': '-3rd Set Winner'
         },
+        '第四盤': {
+            'cn': '-第四盘获胜者',
+            'en': '-4th Set Winner'
+        },
         # 排球&乒乓球
         '第一局': {
             'cn': '-第一局',
