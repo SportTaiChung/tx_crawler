@@ -801,6 +801,8 @@ class TXCrawler:
                             event_full.information.league += '-第四節'
                             event_full.information.cn_league += '-第四节'
                             event_full.information.en_league += ' - 4Q'
+                        else:
+                            event_full.game_type = Period.FULL.value
                     elif self.task_spec['period'] == '2nd':
                         event_full.game_type = Period.SECOND_HALF.value
                     elif second_half_pattern.search(event_full.information.league) and event.game_class == GameType.basketball.value:
@@ -831,25 +833,27 @@ class TXCrawler:
                             event_1st.game_type = Period.LIVE_FIRST_HALF.value
                         elif self.task_spec['period'] == 'set':
                             if event_json[TX.Key.FULL_1ST_TYPE] == '11':
-                                event_full.game_type = '1q'
-                                event_full.information.league += '-第一節'
-                                event_full.information.cn_league += '-第一节'
-                                event_full.information.en_league += ' - 1Q'
+                                event_1st.game_type = '1q'
+                                event_1st.information.league += '-第一節'
+                                event_1st.information.cn_league += '-第一节'
+                                event_1st.information.en_league += ' - 1Q'
                             elif event_json[TX.Key.FULL_1ST_TYPE] == '12':
-                                event_full.game_type = '2q'
-                                event_full.information.league += '-第二節'
-                                event_full.information.cn_league += '-第二节'
-                                event_full.information.en_league += ' - 2Q'
+                                event_1st.game_type = '2q'
+                                event_1st.information.league += '-第二節'
+                                event_1st.information.cn_league += '-第二节'
+                                event_1st.information.en_league += ' - 2Q'
                             elif event_json[TX.Key.FULL_1ST_TYPE] == '13':
-                                event_full.game_type = '3q'
-                                event_full.information.league += '-第三節'
-                                event_full.information.cn_league += '-第三节'
-                                event_full.information.en_league += ' - 3Q'
+                                event_1st.game_type = '3q'
+                                event_1st.information.league += '-第三節'
+                                event_1st.information.cn_league += '-第三节'
+                                event_1st.information.en_league += ' - 3Q'
                             elif event_json[TX.Key.FULL_1ST_TYPE] == '14':
-                                event_full.game_type = '4q'
-                                event_full.information.league += '-第四節'
-                                event_full.information.cn_league += '-第四节'
-                                event_full.information.en_league += ' - 4Q'
+                                event_1st.game_type = '4q'
+                                event_1st.information.league += '-第四節'
+                                event_1st.information.cn_league += '-第四节'
+                                event_1st.information.en_league += ' - 4Q'
+                            else:
+                                event_1st.game_type = Period.FIRST_HALF.value
                         elif self.task_spec['period'] == '2nd':
                             event_full.game_type = Period.SECOND_HALF.value
                         else:
