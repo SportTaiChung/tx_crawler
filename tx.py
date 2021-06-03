@@ -863,7 +863,9 @@ class TXCrawler:
                             else:
                                 event_1st.game_type = Period.FIRST_HALF.value
                         elif self.task_spec['period'] == '2nd':
-                            event_full.game_type = Period.SECOND_HALF.value
+                            event_1st.game_type = Period.SECOND_HALF.value
+                        elif game_type in (GameType.tennis, GameType.eSport, GameType.pingpong):
+                            event_1st.game_type = Period.FULL.value
                         else:
                             event_1st.game_type = Period.FIRST_HALF.value
                         event_1st.twZF.CopyFrom(spread_1st)
@@ -1048,16 +1050,20 @@ class TXCrawler:
 
     def add_league_postfix(self, league_names, sport_name, event_json, period):
         names = []
-        if sport_name in ('網球', '排球', '乒乓球'):
-            if league_names[0] == event_json.get("s_FilterAllianceName") and sport_name != '電子競技':
+        if sport_name in ('網球', '電子競技', '乒乓球'):
+            if league_names[0] == event_json.get("s_FilterAllianceName"):
                 if period is Period.FULL:
                     names.append(f'{league_names[0]}-局數獲勝者')
                     names.append(f'{league_names[1]}-局数获胜者')
                     names.append(f'{league_names[2]}-Game Handicap')
-                else:
+                elif sport_name != '電子競技':
                     names.append(f'{league_names[0]}-盤數獲勝者')
                     names.append(f'{league_names[1]}-盘数获胜者')
                     names.append(f'{league_names[2]}-Set Handicap')
+                else:
+                    names.append(f'{league_names[0]}-總分獲勝者')
+                    names.append(f'{league_names[1]}-总分获胜者')
+                    names.append(f'{league_names[2]}-Point Handicap')
             else:
                 names.append(event_json.get("s_FilterAllianceName", ''))
                 postfix = event_json.get('s_FilterAllianceName').split('-')[-1]
