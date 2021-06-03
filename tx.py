@@ -488,7 +488,7 @@ class TXCrawler:
                                     if self.task_spec['period'] == Period.LIVE.value or page_number == 1:
                                         self.task_spec['empty'] = True
                                         self.task_spec['next_crawl_time'] = datetime.now() + timedelta(minutes=1)
-                                        await self.logger.warning(f'沒有盤口資料，目前總頁數: {data.get(TX.Key.TOTAL_PAGE_NUM)}' extra={'step': 'crawl_data'})
+                                        await self.logger.warning(f'沒有盤口資料，目前總頁數: {data.get(TX.Key.TOTAL_PAGE_NUM)}', extra={'step': 'crawl_data'})
                                     else:
                                         await self.logger.warning('異常盤口資料: %s' % json.dumps(data), extra={'step': 'crawl_data'})
                                 else:
