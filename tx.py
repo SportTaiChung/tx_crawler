@@ -700,15 +700,15 @@ class TXCrawler:
                 event.live_time = self.get_live_time(event_json[TX.Key.EVENT_LIVE_PERIOD], event_play_time, period_score)
                 event_info = protobuf_spec.information()
                 league_names = event_json[TX.Key.EVENT_LEAGUE_NAME_WITH_POSTFIX].split('||')
-                self.add_league_postfix(league_names, sport_name, event_json)
-                event_info.league = league_names[TX.Pos.Lang.TRADITIONAL_CHINESE]
+                postfixed_league_names = self.add_league_postfix(league_names, sport_name, event_json, Period.FULL)
+                event_info.league = postfixed_league_names[TX.Pos.Lang.TRADITIONAL_CHINESE]
                 # 過濾不使用足球走地賽事
                 if self.task_spec['period'] == Period.LIVE.value and self.task_spec[
                         'game_type'] == GameType.soccer.value and EXCLUDED_LEAGUES.search(
                             event_info.league):
                     continue
-                event_info.cn_league = league_names[TX.Pos.Lang.SIMPLIFIED_CHINESE]
-                event_info.en_league = league_names[TX.Pos.Lang.ENGLISH]
+                event_info.cn_league = postfixed_league_names[TX.Pos.Lang.SIMPLIFIED_CHINESE]
+                event_info.en_league = postfixed_league_names[TX.Pos.Lang.ENGLISH]
                 if '角球' in event_info.league:
                     event.score.CopyFrom(
                         protobuf_spec.score(
@@ -759,7 +759,7 @@ class TXCrawler:
                 event_info.away.CopyFrom(away_team_info)
                 event.information.CopyFrom(event_info)
                 game_type = GameType[self.task_spec['game_type']]
-                event.game_class = TXCrawler.game_class_convert(game_type, league_names[TX.Pos.Lang.TRADITIONAL_CHINESE])
+                event.game_class = TXCrawler.game_class_convert(game_type, postfixed_league_names[TX.Pos.Lang.TRADITIONAL_CHINESE])
                 if self.task_spec['period'] in (Period.FULL.value,
                                                 Period.LIVE.value, '2nd',
                                                 'team total', 'special', 'set',
@@ -777,6 +777,10 @@ class TXCrawler:
                         self.reverse_odds(spread, money_line, esre)
                     event_full = protobuf_spec.ApHdc()
                     event_full.CopyFrom(event)
+                    postfixed_league_names = self.add_league_postfix(league_names, sport_name, event_json, Period.FULL)
+                    event_full.information.league = postfixed_league_names[TX.Pos.Lang.TRADITIONAL_CHINESE]
+                    event_full.information.cn_league = postfixed_league_names[TX.Pos.Lang.SIMPLIFIED_CHINESE]
+                    event_full.information.en_league = postfixed_league_names[TX.Pos.Lang.ENGLISH]
                     second_half_pattern = re.compile(r'(總得分|優先|三分球)')
                     if self.task_spec['period'] == Period.LIVE.value:
                         event_full.game_type = Period.LIVE_FULL.value
@@ -829,6 +833,10 @@ class TXCrawler:
                             self.reverse_odds(spread_1st, money_line_1st, esre_1st)
                         event_1st = protobuf_spec.ApHdc()
                         event_1st.CopyFrom(event)
+                        postfixed_league_names = self.add_league_postfix(league_names, sport_name, event_json, Period.FIRST_HALF)
+                        event_1st.information.league = postfixed_league_names[TX.Pos.Lang.TRADITIONAL_CHINESE]
+                        event_1st.information.cn_league = postfixed_league_names[TX.Pos.Lang.SIMPLIFIED_CHINESE]
+                        event_1st.information.en_league = postfixed_league_names[TX.Pos.Lang.ENGLISH]
                         if self.task_spec['period'] == Period.LIVE.value:
                             event_1st.game_type = Period.LIVE_FIRST_HALF.value
                         elif self.task_spec['period'] == 'set':
@@ -1038,18 +1046,26 @@ class TXCrawler:
                 pass
         return home_score, away_score
 
-    def add_league_postfix(self, league_names, sport_name, event_json):
+    def add_league_postfix(self, league_names, sport_name, event_json, period):
+        names = []
         if sport_name in ('網球', '排球', '乒乓球'):
             if league_names[0] == event_json.get("s_FilterAllianceName") and sport_name != '電子競技':
-                league_names[0] += '-局數獲勝者'
-                league_names[1] += '-局数获胜者'
-                league_names[2] += '-Game Handicap'
+                if period is Period.FULL:
+                    names.append(f'{league_names[0]}-局數獲勝者')
+                    names.append(f'{league_names[1]}-局数获胜者')
+                    names.append(f'{league_names[2]}-Game Handicap')
+                else:
+                    names.append(f'{league_names[0]}-盤數獲勝者')
+                    names.append(f'{league_names[1]}-盘数获胜者')
+                    names.append(f'{league_names[2]}-Set Handicap')
             else:
-                league_names[0] = event_json.get("s_FilterAllianceName", '')
+                names.append(event_json.get("s_FilterAllianceName", ''))
                 postfix = event_json.get('s_FilterAllianceName').split('-')[-1]
                 postfix_mapping = Mapping.league_postfix[postfix.strip()]
-                league_names[1] += postfix_mapping['cn']
-                league_names[2] += postfix_mapping['en']
+                names.append(f'{league_names[1]}{postfix_mapping["cn"]}')
+                names.append(f'{league_names[2]}{postfix_mapping["en"]}')
+            return names
+        return league_names
 
     def get_correct_teams(self, league_name, team_a, team_b, team_order):
         # 總得分玩法將隊伍對調，顯示才正常
