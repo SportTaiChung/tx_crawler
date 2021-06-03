@@ -415,6 +415,9 @@ class TXCrawler:
     async def crawl_data(self, session):
         events = None
         total_page = self.task_spec.get('total_page') or self.task_spec.get('page') or 1
+        if self.task_spec.get('empty') and self.task_spec.get('next_crawl_time', datetime.now() - timedelta(minutes=-1)) > datetime.now():
+            await self.logger.info('無盤口資料，休眠1分鐘')
+            await asyncio.sleep(60)
         for page_number in range(1, total_page + 1):
             if self.task_spec.get('page') and self.task_spec.get('page') != page_number:
                 continue
@@ -482,8 +485,14 @@ class TXCrawler:
                             self.step_log_json['total_page'] = self.task_spec['total_page']
                             if not events:
                                 if TX.Key.EVENT_LIST not in data:
-                                    await self.logger.warning('異常盤口資料: %s' % json.dumps(data), extra={'step': 'crawl_data'})
+                                    if self.task_spec['period'] == Period.LIVE.value or page_number == 1:
+                                        self.task_spec['empty'] = True
+                                        self.task_spec['next_crawl_time'] = datetime.now() + timedelta(minutes=1)
+                                        await self.logger.warning(f'沒有盤口資料，目前總頁數: {data.get(TX.Key.TOTAL_PAGE_NUM)}' extra={'step': 'crawl_data'})
+                                    else:
+                                        await self.logger.warning('異常盤口資料: %s' % json.dumps(data), extra={'step': 'crawl_data'})
                                 else:
+                                    self.task_spec['empty'] = False
                                     events = data
                             else:
                                 events[TX.Key.EVENT_LIST].extend(data.get(TX.Key.EVENT_LIST) or [])
