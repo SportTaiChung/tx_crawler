@@ -151,6 +151,9 @@ class TXCrawler:
                 self.logger.extra['game_type'] = task['game_type']
                 self.logger.extra['play_type'] = task['period']
                 self.execution_id = str(uuid.uuid4()).replace('-', '')
+                if self.task_spec.get('empty') and self.task_spec.get('next_crawl_time', datetime.now() - timedelta(minutes=-1)) > datetime.now():
+                    await self.logger.info('無盤口資料，休眠中')
+                    continue
                 if self._config['read_from_file']:
                     with open(self._config['read_from_file']) as f:
                         raw_data = json.load(f)
@@ -415,9 +418,6 @@ class TXCrawler:
     async def crawl_data(self, session):
         events = None
         total_page = self.task_spec.get('total_page') or self.task_spec.get('page') or 1
-        if self.task_spec.get('empty') and self.task_spec.get('next_crawl_time', datetime.now() - timedelta(minutes=-1)) > datetime.now():
-            await self.logger.info('無盤口資料，休眠1分鐘')
-            await asyncio.sleep(60)
         for page_number in range(1, total_page + 1):
             if self.task_spec.get('page') and self.task_spec.get('page') != page_number:
                 continue
