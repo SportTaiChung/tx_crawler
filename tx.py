@@ -1066,7 +1066,7 @@ class TXCrawler:
                     names.append(f'{league_names[0]}-局數獲勝者')
                     names.append(f'{league_names[1]}-局数获胜者')
                     names.append(f'{league_names[2]}-Game Handicap')
-                elif sport_name != '電子競技':
+                elif sport_name != '兵乓球':
                     names.append(f'{league_names[0]}-盤數獲勝者')
                     names.append(f'{league_names[1]}-盘数获胜者')
                     names.append(f'{league_names[2]}-Set Handicap')
