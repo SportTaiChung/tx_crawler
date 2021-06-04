@@ -1061,7 +1061,7 @@ class TXCrawler:
     def add_league_postfix(self, league_names, sport_name, event_json, period):
         names = []
         if sport_name in ('網球', '電子競技', '乒乓球'):
-            if league_names[0] == event_json.get("s_FilterAllianceName"):
+            if league_names[0] == event_json.get("s_FilterAllianceName") and sport_name != '電子競技':
                 if period is Period.FULL:
                     names.append(f'{league_names[0]}-局數獲勝者')
                     names.append(f'{league_names[1]}-局数获胜者')
