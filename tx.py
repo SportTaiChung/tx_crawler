@@ -875,6 +875,7 @@ class TXCrawler:
                             event_1st.game_type = Period.SECOND_HALF.value
                         elif game_type in (GameType.tennis, GameType.eSport, GameType.pingpong):
                             event_1st.game_type = Period.FULL.value
+                            event_1st.game_id += '1'
                         else:
                             event_1st.game_type = Period.FIRST_HALF.value
                         event_1st.twZF.CopyFrom(spread_1st)
