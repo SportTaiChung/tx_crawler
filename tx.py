@@ -1077,9 +1077,13 @@ class TXCrawler:
             else:
                 names.append(event_json.get("s_FilterAllianceName", ''))
                 postfix = event_json.get('s_FilterAllianceName').split('-')[-1]
-                postfix_mapping = Mapping.league_postfix[postfix.strip()]
-                names.append(f'{league_names[1]}{postfix_mapping["cn"]}')
-                names.append(f'{league_names[2]}{postfix_mapping["en"]}')
+                postfix_mapping = Mapping.league_postfix.get(postfix.strip())
+                if postfix_mapping:
+                    names.append(f'{league_names[1]}{postfix_mapping["cn"]}')
+                    names.append(f'{league_names[2]}{postfix_mapping["en"]}')
+                else:
+                    names.append(league_names[1])
+                    names.append(league_names[2])
             return names
         return league_names
 
