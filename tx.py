@@ -484,7 +484,7 @@ class TXCrawler:
                             self.task_spec['total_page'] = self.task_spec.get('page') or data.get(TX.Key.TOTAL_PAGE_NUM, 1) or 1
                             self.step_log_json['total_page'] = self.task_spec['total_page']
                             if not events:
-                                if TX.Key.EVENT_LIST not in data:
+                                if not data.get(TX.Key.EVENT_LIST):
                                     if self.task_spec['period'] == Period.LIVE.value or page_number == 1:
                                         self.task_spec['empty'] = True
                                         self.task_spec['next_crawl_time'] = datetime.now() + timedelta(minutes=1)
@@ -1125,7 +1125,7 @@ class TXCrawler:
             game_class = GameType.tennis
         elif game_type is GameType.eSport:
             game_class = GameType.eSport
-        elif '歐洲冠軍' in league:
+        elif '歐洲冠軍' in league or '歐洲盃' in league:
             game_class = GameType.UCL
         elif game_type is GameType.soccer:
             game_class = GameType.soccer
