@@ -482,9 +482,12 @@ class TXCrawler:
                             self.site_maintaining = False
                             self.relogin_count = 0
                             self.task_spec['total_page'] = self.task_spec.get('page') or data.get(TX.Key.TOTAL_PAGE_NUM, 1) or 1
-                            self.step_log_json['total_page'] = self.task_spec['total_page']
+                            self.step_log_json['total_page'] = data.get(TX.Key.TOTAL_PAGE_NUM)
                             if not events:
-                                if not data.get(TX.Key.EVENT_LIST):
+                                if not data.get(TX.Key.EVENT_LIST) or (
+                                        self.task_spec['period'] == Period.LIVE.value
+                                        and self.task_spec.get('page', 20) >
+                                        data.get(TX.Key.TOTAL_PAGE_NUM, 0)):
                                     if self.task_spec['period'] == Period.LIVE.value or page_number == 1:
                                         self.task_spec['empty'] = True
                                         self.task_spec['next_crawl_time'] = datetime.now() + timedelta(minutes=1)
