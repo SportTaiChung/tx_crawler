@@ -28,7 +28,6 @@ import pickle
 import aiohttp
 import aio_pika
 from fake_useragent import UserAgent
-import routeros_api
 import json
 from google.protobuf import text_format
 import APHDC_pb2 as protobuf_spec
