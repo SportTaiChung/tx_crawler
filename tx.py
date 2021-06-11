@@ -6,6 +6,7 @@ ps38 crawler
 import asyncio
 from json.decoder import JSONDecodeError
 import os
+import subprocess
 from urllib.parse import urlencode
 from datetime import datetime, timedelta
 import logging
@@ -27,6 +28,7 @@ import pickle
 import aiohttp
 import aio_pika
 from fake_useragent import UserAgent
+import routeros_api
 import json
 from google.protobuf import text_format
 import APHDC_pb2 as protobuf_spec
@@ -140,7 +142,10 @@ class TXCrawler:
                 else:
                     await self.logger.error(f'{self.account} {self.name} 登入失敗，休眠5分鐘')
                     if self._config.get('auto_change_ip'):
-                        os.system(self._config['change_ip_command'])
+                        try:
+                            output = subprocess.check_output(self._config['change_ip_command'], stderr=subprocess.STDOUT)
+                        except subprocess.CalledProcessError:
+                            await self.logger.error(f'{self.account} {self.name} 自動更換IP失敗，請IT重開路由器，錯誤訊息: {output}')
                         await self.logger.error(f'{self.account} {self.name} 自動更換IP')
                     await asyncio.sleep(300)
             for task in self._tasks:
