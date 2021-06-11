@@ -222,11 +222,16 @@ class TXCrawler:
             domains = await self.test_site_domains(session)
             if domains:
                 self.account = account
-                if await self.login(session, domains, account, account_info['password']):
-                    if await self.redirect_bet_site(session):
-                        self._sport_info = await self.query_sport_info(session)
-                        if TX.Key.SPORT_EVENT_INFO in self._sport_info:
-                            sessions.append(session)
+                try:
+                    if await self.login(session, domains, account, account_info['password']):
+                        if await self.redirect_bet_site(session):
+                            self._sport_info = await self.query_sport_info(session)
+                            if TX.Key.SPORT_EVENT_INFO in self._sport_info:
+                                sessions.append(session)
+                except Exception as ex:
+                    error = traceback.format_exc()
+                    await self.logger.error(f'登入失敗: {str(ex)}', extra={'step': 'login'})
+                    await self.logger.warning(error, extra={'step': 'login'})
             if session not in sessions:
                 await session.close()
         return sessions
