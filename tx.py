@@ -142,9 +142,9 @@ class TXCrawler:
                     await self.logger.error(f'{self.account} {self.name} 登入失敗，休眠5分鐘')
                     if self._config.get('auto_change_ip'):
                         try:
-                            output = subprocess.check_output(self._config['change_ip_command'].split(' '), stderr=subprocess.STDOUT)
+                            _  = subprocess.check_output(self._config['change_ip_command'].split(' '), stderr=subprocess.STDOUT)
                         except subprocess.CalledProcessError:
-                            await self.logger.error(f'{self.account} {self.name} 自動更換IP失敗，請IT重開路由器，錯誤訊息: {output}')
+                            await self.logger.error(f'{self.account} {self.name} 自動更換IP失敗，請IT重開路由器')
                         await self.logger.error(f'{self.account} {self.name} 自動更換IP')
                     await asyncio.sleep(300)
             for task in self._tasks:
