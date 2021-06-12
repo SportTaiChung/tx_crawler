@@ -156,7 +156,6 @@ class TXCrawler:
                 self.logger.extra['play_type'] = task['period']
                 self.execution_id = str(uuid.uuid4()).replace('-', '')
                 if self.task_spec.get('empty') and self.task_spec.get('next_crawl_time', datetime.now() - timedelta(minutes=-1)) > datetime.now():
-                    await self.logger.info('無盤口資料，休眠中')
                     continue
                 if self._config['read_from_file']:
                     with open(self._config['read_from_file']) as f:
@@ -501,6 +500,7 @@ class TXCrawler:
                                         self.task_spec['empty'] = True
                                         self.task_spec['next_crawl_time'] = datetime.now() + timedelta(minutes=1)
                                         await self.logger.warning(f'沒有盤口資料，目前總頁數: {data.get(TX.Key.TOTAL_PAGE_NUM)}', extra={'step': 'crawl_data'})
+                                        await self.logger.info('無盤口資料，休眠中')
                                     else:
                                         await self.logger.warning('異常盤口資料: %s' % json.dumps(data), extra={'step': 'crawl_data'})
                                 else:
