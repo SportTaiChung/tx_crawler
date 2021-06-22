@@ -1137,7 +1137,7 @@ class TXCrawler:
             game_class = GameType.tennis
         elif game_type is GameType.eSport:
             game_class = GameType.eSport
-        elif '歐洲冠軍' in league or '歐洲盃' in league:
+        elif ('歐洲冠軍' in league or '歐洲盃' in league) and '外圍賽' not in league:
             game_class = GameType.UCL
         elif game_type is GameType.soccer:
             game_class = GameType.soccer
