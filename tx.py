@@ -811,6 +811,8 @@ class TXCrawler:
                             event_full.information.league += '-第一節'
                             event_full.information.cn_league += '-第一节'
                             event_full.information.en_league += ' - 1Q'
+                            if event.game_class == GameType.otherbasketball.value:
+                                continue
                         elif event_json[TX.Key.FULL_1ST_TYPE] == '12':
                             event_full.game_type = '2q'
                             event_full.information.league += '-第二節'
