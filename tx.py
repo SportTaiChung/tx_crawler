@@ -446,7 +446,7 @@ class TXCrawler:
                 sport_info = sport_info_map[ball_type.value]
             is_world_cup = sport_info.get(TX.Key.IS_WORLD_CUP, '0')
             if self.task_spec.get('wdls'):
-                is_world_cup = '4'
+                is_world_cup = '3'
             is_olympic = 'true' if sport_type is TX.Value.SportType.SOCCER_OLYMPIC else 'false'
             if is_olympic == 'true':
                 sport_type = TX.Value.SportType.SOCCER
