@@ -1115,7 +1115,7 @@ class TXCrawler:
             else:
                 game_class = GameType.kbo
         elif game_type == GameType.basketball:
-            if ('美國職業籃球' in league or 'NBA' in league) and ('WNBA' not in league and 'Summer League' not in league):
+            if ('美國職業籃球' in league or 'NBA' in league) and ('WNBA' not in league and 'Summer League' not in league and '夏季聯賽' not in league):
                 game_class = GameType.basketball
             else:
                 game_class = GameType.otherbasketball
