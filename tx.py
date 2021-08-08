@@ -430,23 +430,11 @@ class TXCrawler:
             if self.task_spec.get('page') and self.task_spec.get('page') != page_number:
                 continue
             game_type = self.task_spec['game_type']
-            # sport_type_name = sport_event_info[TX.Key.SPORT_NAME].split('||')[TX.Pos.Lang.TRADITIONAL_CHINESE]
-            # sport_type = TX.Value.SportType[sport_event_info[TX.Key.SPORT_TYPE]]
-            # ball_type = TX.Value.BallType[sport_event_info[TX.Key.BALL_TYPE]]
             sport_type = TX.Value.SportType.get_sport_type(game_type)
             ball_type = TX.Value.BallType.get_ball_type(game_type, self.task_spec['category'])
-            sport_list = self._sport_info[TX.Key.SPORT_EVENT_INFO]
-            sport_info_map = {}
-            for sport in sport_list:
-                sport_info_map[sport[TX.Key.BALL_TYPE]] = sport
-            sport_info = None
-            if self.task_spec['category'] in ('pd', 'tg', 'hf'):
-                sport_info = sport_info_map[TX.Value.BallType.SOCCER.value]
-            else:
-                sport_info = sport_info_map[ball_type.value]
-            is_world_cup = sport_info.get(TX.Key.IS_WORLD_CUP, '0')
+            is_world_cup = '0'
             if self.task_spec.get('wdls'):
-                is_world_cup = '3'
+                is_world_cup = '4'
             is_olympic = 'true' if sport_type is TX.Value.SportType.SOCCER_OLYMPIC else 'false'
             if is_olympic == 'true':
                 sport_type = TX.Value.SportType.SOCCER
@@ -473,7 +461,7 @@ class TXCrawler:
                 return events
             session_info = self._session_login_info_map[session]
             start_query_time = perf_counter()
-            async with session.get(f'{session_info["logined_domain"]}/{api_url}?{urlencode(form)}') as api_resp:
+            async with session.get(f'{session_info["logined_domain"]}/{api_url}', data=form) as api_resp:
                 end_query_time = perf_counter()
                 if api_resp.status == 200:
                     encrypted_data = await api_resp.text()
