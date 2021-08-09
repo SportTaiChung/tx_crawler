@@ -486,7 +486,7 @@ class Mapping:
     }
     category_id = {
         'all': TX.Value.CategoryID.ALL,
-        'soccer': TX.Value.CategoryID.SOCCER_ALL,
+        'soccer': TX.Value.CategoryID.ALL,
         'baseball': TX.Value.CategoryID.BASEBALL_ALL,
         'nba': TX.Value.CategoryID.BASKETBALL_NBA,
         'ncaa': TX.Value.CategoryID.BASKETBALL_NCAA,
