@@ -273,6 +273,7 @@ class TX:
             BASEBALL = 'baseball'
             BASKETBALL = 'lq'
             TENNIS = 'wq'
+            FOOTBALL = 'football'
             HOCKEY = 'bq'
             OTHER = 'ot'  # OTHER 包含排球、手球、撞球、桌球、羽球、電競
             SOCCER_OLYMPIC = 'zqOlympic'  # 足球奧運
@@ -291,6 +292,7 @@ class TX:
             BASKETBALL = 'b_lq'
             TENNIS = 'b_wq'
             HOCKEY = 'b_bq'
+            FOOTBALL = 'b_mz'
             VOLLEYBALL = 'b_pq'
             HANDBALL = 'b_sq'
             POOL = 'b_zhuangq'  # 撞球
@@ -320,6 +322,7 @@ class TX:
             SOCCER = '10'
             BASEBALL = '13'
             BASKETBALL = '6'
+            FOOTBALL = '8'
             TENNIS = '9'
             HOCKEY = '5'
             VOLLEYBALL = '234'
@@ -427,6 +430,7 @@ class Mapping:
         GameType.basketball: TX.Value.BallType.BASKETBALL,
         GameType.baseball: TX.Value.BallType.BASEBALL,
         GameType.tennis: TX.Value.BallType.TENNIS,
+        GameType.football: TX.Value.BallType.FOOTBALL,
         GameType.hockey: TX.Value.BallType.HOCKEY,
         GameType.eSport: TX.Value.BallType.E_SPORT,
         GameType.pingpong: TX.Value.BallType.PINGPONG,
@@ -441,6 +445,7 @@ class Mapping:
         TX.Value.BallType.BASEBALL: TX.Value.BallTypeID.BASEBALL,
         TX.Value.BallType.BASKETBALL: TX.Value.BallTypeID.BASKETBALL,
         TX.Value.BallType.TENNIS: TX.Value.BallTypeID.TENNIS,
+        TX.Value.BallType.FOOTBALL: TX.Value.BallTypeID.FOOTBALL,
         TX.Value.BallType.HOCKEY: TX.Value.BallTypeID.HOCKEY,
         TX.Value.BallType.VOLLEYBALL: TX.Value.BallTypeID.VOLLEYBALL,
         TX.Value.BallType.HANDBALL: TX.Value.BallTypeID.HANDBALL,
@@ -455,6 +460,7 @@ class Mapping:
         'baseball': TX.Value.SportType.BASEBALL,
         'basketball': TX.Value.SportType.BASKETBALL,
         'tennis': TX.Value.SportType.TENNIS,
+        'football': TX.Value.SportType.FOOTBALL,
         'hockey': TX.Value.SportType.HOCKEY,
         'volleyball': TX.Value.SportType.OTHER,
         'handball': TX.Value.SportType.OTHER,
@@ -510,9 +516,9 @@ class Mapping:
         'baseball': GameType.baseball.value,
         'basketball': GameType.basketball,
         'tennis': GameType.tennis,
+        'football': GameType.football,
         'hockey': GameType.hockey,
         'eSport': GameType.eSport,
-        'football': GameType.football,
         'other': GameType.other,  # OTHER 包含排球、手球、撞球、桌球、羽球、電競
         'zqOlympic': GameType.soccer  # 足球奧運
     }
@@ -612,8 +618,8 @@ class Mapping:
         'baseball': 'TX_BS',
         'basketball': 'TX_BK',
         'tennis': 'TX_TN',
-        'hockey': 'TX_HC',
         'football': 'TX_FB',
+        'hockey': 'TX_HC',
         'pingpong': 'TX_PP',
         'volleyball': 'TX_VL',
         'eSport': 'TX_ES'
