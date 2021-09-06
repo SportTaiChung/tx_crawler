@@ -1476,13 +1476,13 @@ class TXCrawler:
                 game_type = self.task_spec['game_type']
                 if self.task_spec['category'] == 'pd':
                     game_type = f'{game_type}_pd'
-                exchange_name = Mapping.exchange_name[game_type]
+                key = Mapping.routing_key_name[game_type]
                 if self._config['env'] != 'production':
-                    exchange_name = self._config['test_exchange']
+                    key = self._config['test_exchange']
                 async with self.mq_channel_pool.acquire() as channel:
-                    exchange = await channel.get_exchange(exchange_name)
+                    exchange = await channel.get_exchange(self._config['MQ_EXCHANGE'])
                     await exchange.publish(
-                        routing_key='',
+                        routing_key=key,
                         message=aio_pika.Message(body=protobuf_data)
                     )
             except (aio_pika.AMQPException, asyncio.TimeoutError) as err:

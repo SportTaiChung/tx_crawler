@@ -612,7 +612,7 @@ class Mapping:
         '兵乓球': '16',
         '排球': '21'
     }
-    exchange_name = {
+    routing_key_name = {
         'soccer': 'TX_SC',
         'soccer_pd': 'TX_SC_PD',
         'baseball': 'TX_BS',
