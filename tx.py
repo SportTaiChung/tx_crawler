@@ -904,7 +904,7 @@ class TXCrawler:
                     event_pd = protobuf_spec.ApHdc()
                     event_pd.CopyFrom(event)
                     # 全場
-                    if event_json[TX.Key.FULL_1ST_TYPE] == '1':
+                    if event_json[TX.Key.FULL_1ST_TYPE] == '0':
                         if event_json[TX.Key.LIVE_TYPE] == '2':
                             event_pd.game_type = Period.CORRECT_SCORE_LIVE.value
                         else:
@@ -912,7 +912,7 @@ class TXCrawler:
                         event_pd.multi = self.extract_correct_score(event_json)
                     # 上半
                     else:
-                        if event_json[TX.Key.LIVE_TYPE] == '2':
+                        if event_json[TX.Key.LIVE_TYPE] == '1':
                             event_pd.game_type = Period.CORRECT_SCORE_LIVE_1ST_HALF.value
                         else:
                             event_pd.game_type = Period.CORRECT_SCORE_1ST_HALF.value
