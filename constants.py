@@ -346,8 +346,8 @@ class TX:
             SPECIAL_15_MIN = '10'  # 特定15分
             FULL_FIRST_HALF = '11'  # 單式，全場、上半場
             SET = '12'  # 單節
-            ONE_TO_THREE_SET = '13' # 1~3局
-            ONE_TO_SEVEN_SET = '14' # 1~7局
+            ONE_TO_THREE_SET = '13'  # 1~3局
+            ONE_TO_SEVEN_SET = '14'  # 1~7局
             TEAM_TOTAL = '15'
             SINGLE_SET = '16'
             PINGPONG_VOLLEYBALL_SET = '20'
@@ -393,7 +393,7 @@ class TX:
             FIRST_HALF = 1
             SECOND_HALF = 2
             INTERMISSION = 3
-        
+
         class PeriodId(Enum):
             NOT_START = '0'
             HALF_TIME_REST = '1'
@@ -480,7 +480,7 @@ class Mapping:
         '15min': TX.Value.Scene.SPECIAL_15_MIN,  # 特定15分
         'full': TX.Value.Scene.FULL_FIRST_HALF,  # 單式，全場、上半場
         'set': TX.Value.Scene.SET,  # 單節
-        'single_set': TX.Value.Scene.SINGLE_SET, # 單節最高分
+        'single_set': TX.Value.Scene.SINGLE_SET,  # 單節最高分
         'set_1_3': TX.Value.Scene.ONE_TO_THREE_SET,
         'set_1_7': TX.Value.Scene.ONE_TO_SEVEN_SET,
         'tennis_set': TX.Value.Scene.TENNIS_SET,

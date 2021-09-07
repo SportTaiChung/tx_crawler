@@ -43,7 +43,7 @@ class AsyncTelegramHandler(Handler):
         else:
             self.filter = Filter()
         self._initialization_lock = asyncio.Lock()
-    
+
     @property
     def initialized(self):
         pass

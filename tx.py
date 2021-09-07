@@ -142,7 +142,7 @@ class TXCrawler:
                     await self.logger.error(f'{self.account} {self.name} 登入失敗，休眠5分鐘')
                     if self._config.get('auto_change_ip'):
                         try:
-                            _  = subprocess.check_output(self._config['change_ip_command'].split(' '), stderr=subprocess.STDOUT)
+                            _ = subprocess.check_output(self._config['change_ip_command'].split(' '), stderr=subprocess.STDOUT)
                         except subprocess.CalledProcessError:
                             await self.logger.error(f'{self.account} {self.name} 自動更換IP失敗，請IT重開路由器')
                         await self.logger.error(f'{self.account} {self.name} 自動更換IP')
@@ -461,6 +461,7 @@ class TXCrawler:
                 return events
             session_info = self._session_login_info_map[session]
             start_query_time = perf_counter()
+            event_list_key = Mapping.event_list_key.get(self.task_spec['category'], TX.Key.EVENT_LIST)
             async with session.get(f'{session_info["logined_domain"]}/{api_url}', data=form) as api_resp:
                 end_query_time = perf_counter()
                 if api_resp.status == 200:
@@ -480,7 +481,7 @@ class TXCrawler:
                             self.task_spec['total_page'] = self.task_spec.get('page') or data.get(TX.Key.TOTAL_PAGE_NUM, 1) or 1
                             self.step_log_json['total_page'] = data.get(TX.Key.TOTAL_PAGE_NUM)
                             if not events:
-                                if not data.get(TX.Key.EVENT_LIST) or (
+                                if not data.get(event_list_key) or (
                                         self.task_spec['period'] == Period.LIVE.value
                                         and self.task_spec.get('page', 20) >
                                         data.get(TX.Key.TOTAL_PAGE_NUM, 0)):
@@ -495,7 +496,7 @@ class TXCrawler:
                                     self.task_spec['empty'] = False
                                     events = data
                             else:
-                                events[TX.Key.EVENT_LIST].extend(data.get(TX.Key.EVENT_LIST) or [])
+                                events[event_list_key].extend(data.get(event_list_key) or [])
                             await asyncio.sleep(self._config['crawl_interval'])
                     else:
                         try:
@@ -701,7 +702,7 @@ class TXCrawler:
                 event.source_updatetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
                 event.live = 'true' if event_json[TX.Key.LIVE_TYPE] == '2' else 'false'
                 event_play_time = str(int(event_json[TX.Key.EVENT_LIVE_TIME]))
-                period_score = period_score_map.get(event_json[TX.Key.EVENT_SPORT_CODE], {}).get(event_json[TX.Key.EVENT_ID_GP])
+                period_score = period_score_map.get(event_json.get(TX.Key.EVENT_SPORT_CODE), {}).get(event_json[TX.Key.EVENT_ID_GP])
                 event.live_time = self.get_live_time(event_json[TX.Key.EVENT_LIVE_PERIOD], event_play_time, period_score)
                 event_info = protobuf_spec.information()
                 league_names = event_json[TX.Key.EVENT_LEAGUE_NAME_WITH_POSTFIX].split('||')
@@ -883,7 +884,7 @@ class TXCrawler:
                         event_1st.esre.CopyFrom(esre_1st)
                         event_1st.sd.CopyFrom(parity_1st)
                         event_proto_list.append(event_1st)
-                #搶首尾與單節最高分
+                # 搶首尾與單節最高分
                 elif self.task_spec['period'] == ('first_last_point'):
                     event_first_last = protobuf_spec.ApHdc()
                     event_first_last.CopyFrom(event)
@@ -919,23 +920,21 @@ class TXCrawler:
                     event_proto_list.append(event_pd)
                 # 入球數
                 elif self.task_spec['category'] == 'tg':
-                    event_tg = protobuf_spec.ApHdc()
-                    event_tg.CopyFrom(event)
-                    # 全場
-                    if event_json[TX.Key.FULL_1ST_TYPE] == '1':
-                        if event_json[TX.Key.LIVE_TYPE] == '2':
-                            event_tg.game_type = Period.SCORE_SUM_LIVE.value
-                        else:
-                            event_tg.game_type = Period.SCORE_SUM.value
-                        event_tg.multi = self.extract_score_sum(event_json, Period.FULL)
-                    # 上半
+                    event_tg_full = protobuf_spec.ApHdc()
+                    event_tg_first_half = protobuf_spec.ApHdc()
+                    event_tg_full.CopyFrom(event)
+                    event_tg_first_half.CopyFrom(event)
+                    tg_full, tg_first_half= self.extract_score_sum(event_json)
+                    if event_json[TX.Key.LIVE_TYPE] == '2':
+                        event_tg_full.game_type = Period.SCORE_SUM_LIVE.value
+                        event_tg_first_half.game_type = Period.SCORE_SUM_LIVE_1ST_HALF.value
                     else:
-                        if event_json[TX.Key.LIVE_TYPE] == '2':
-                            event_tg.game_type = Period.SCORE_SUM_LIVE_1ST_HALF.value
-                        else:
-                            event_tg.game_type = Period.SCORE_SUM_1ST_HALF.value
-                        event_tg.multi = self.extract_score_sum(event_json, Period.FIRST_HALF)
-                    event_proto_list.append(event_tg)
+                        event_tg_full.game_type = Period.SCORE_SUM.value
+                        event_tg_first_half.game_type = Period.SCORE_SUM_1ST_HALF.value
+                    event_tg_full.multi = json.dumps(tg_full)
+                    event_tg_first_half.multi = json.dumps(tg_first_half)
+                    event_proto_list.append(event_tg_full)
+                    event_proto_list.append(event_tg_first_half)
                 # 半全場
                 elif self.task_spec['category'] == 'hf':
                     event_hf = protobuf_spec.ApHdc()
@@ -1381,24 +1380,30 @@ class TXCrawler:
             half_full_score['AA'] = str(self.get_odds(event_json[TX.Key.HALF_FULL_SCORE_AA]))
         return json.dumps(half_full_score)
 
-    def extract_score_sum(self, event_json, period):
-        score_sum = {
+    def extract_score_sum(self, event_json):
+        score_sum_full = {
             '0-1': '0',
             '2-3': '0',
             '4-6': '0',
             '7+': '0',
         }
-        if period is Period.FULL:
-            score_sum['0-1'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_0_1]))
-            score_sum['2-3'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_2_3]))
-            score_sum['4-6'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_4_6]))
-            score_sum['7+'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_7_ABOVE]))
-        elif period is Period.FIRST_HALF:
-            score_sum['0-1'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_1ST_0_1]))
-            score_sum['2-3'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_1ST_2_3]))
-            score_sum['4-6'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_1ST_4_6]))
-            score_sum['7+'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_1ST_7_ABOVE]))
-        return json.dumps(score_sum)
+        score_sum_first_half = {
+            '0-1': '0',
+            '2-3': '0',
+            '4-6': '0',
+            '7+': '0',
+        }
+        # 全場
+        score_sum_full['0-1'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_0_1]))
+        score_sum_full['2-3'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_2_3]))
+        score_sum_full['4-6'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_4_6]))
+        score_sum_full['7+'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_7_ABOVE]))
+        # 上半
+        score_sum_first_half['0-1'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_1ST_0_1]))
+        score_sum_first_half['2-3'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_1ST_2_3]))
+        score_sum_first_half['4-6'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_1ST_4_6]))
+        score_sum_first_half['7+'] = str(self.get_odds(event_json[TX.Key.SCORE_SUM_1ST_7_ABOVE]))
+        return score_sum_full, score_sum_first_half
 
     def convert_game_type(self, event_json):
         # 九州資料對照轉成賽事玩法 如：全場．上半場
