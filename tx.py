@@ -521,11 +521,7 @@ class TXCrawler:
                                 extra={'step': 'crawl_data'})
                         else:
                             await self.logger.error(f'{self.account} {self.name} 可能被被登出，回應: {json.dumps(alert_info, ensure_ascii=False)}', extra={'step': 'crawl_data'})
-                        if (
-                            (not self.account_banned or not self.site_maintaining)
-                            or ((self.account_banned or self.site_maintaining)
-                                and self.next_relogin_time < datetime.now())
-                        ) and self.relogin_count < 10:
+                        if not self.account_banned and self.next_relogin_time < datetime.now() and self.relogin_count < 10:
                             await self.relogin(session)
                         elif self.relogin_count >= 10:
                             await self.logger.error(f'{self.account} {self.name} 重新登入次數過多，請確認爬蟲狀態，並手動重啟', extra={'step': 'crawl_data'})
