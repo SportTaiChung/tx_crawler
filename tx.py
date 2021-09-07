@@ -924,6 +924,7 @@ class TXCrawler:
                     event_tg_first_half = protobuf_spec.ApHdc()
                     event_tg_full.CopyFrom(event)
                     event_tg_first_half.CopyFrom(event)
+                    event_tg_first_half.game_id += '1'
                     tg_full, tg_first_half= self.extract_score_sum(event_json)
                     if event_json[TX.Key.LIVE_TYPE] == '2':
                         event_tg_full.game_type = Period.SCORE_SUM_LIVE.value
