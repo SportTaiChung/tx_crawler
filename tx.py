@@ -888,12 +888,16 @@ class TXCrawler:
                 elif self.task_spec['period'] == ('first_last_point'):
                     event_first_last = protobuf_spec.ApHdc()
                     event_first_last.CopyFrom(event)
-                    event_first_last.game_type = Period.MULTI.value
                     if self.task_spec['game_type'] == 'hockey':
+                        event_first_last.game_type = Period.FULL.value
                         first = self.extract_spread(event_json, Period.FULL)
+                        # 冰球搶首尾讓分主客隊相反
+                        first.homeZF.line, first.awayZF.line = first.awayZF.line, first.homeZF.line
+                        first.homeZF.odds, first.awayZF.odds = first.awayZF.odds, first.homeZF.odds
                         last = self.extract_total(event_json, Period.FULL)
                         highest, _ = self.extract_money_line(event_json, Period.FULL)
                     else:
+                        event_first_last.game_type = Period.MULTI.value
                         first, last, highest = self.extract_basketball_special_handicap(event_json)
                     event_first_last.twZF.CopyFrom(first)
                     event_first_last.twDS.CopyFrom(last)
