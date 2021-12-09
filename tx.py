@@ -21,6 +21,7 @@ from copy import deepcopy
 from hashlib import md5
 import hmac
 import urllib.parse
+from pyquery import PyQuery as pq
 import base64
 import xxtea
 import re
@@ -264,7 +265,7 @@ class TXCrawler:
         }
         random.shuffle(success_domains)
         for domain in success_domains:
-            home_resp = await session.get(f'{domain}/Index.aspx')
+            home_resp = await session.get(f'{domain}/Index.aspx', headers=self._config['login_headers'])
             if home_resp.status == 200:
                 try:
                     async with session.post(
@@ -342,6 +343,13 @@ class TXCrawler:
     async def redirect_bet_site(self, session):
         session_info = self._session_login_info_map[session]
         verify_key = None
+        available_redirect_sites = []
+        session.cookie_jar.update_cookies({
+            'icwN2': '0',
+            'bdnotice': '0',
+            f'Tm_{session_info["account"]}_2': '1',
+            f'{session_info["account"]}-2': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
         async with session.get(
                 f'{session_info["logined_domain"]}/{self._config["api_path"]["redirect_selection"]}',
                 headers=self._config['login_headers']) as site_select_resp:
@@ -349,26 +357,10 @@ class TXCrawler:
             match = re.search(r'verify=([\w\d._-]+)&', body)
             if match:
                 verify_key = match.group(1)
-        form = {
-            "type": "7",
-            "isphone": "0",
-            "verify": verify_key,
-            "user": "",
-            "mobilekf": "1",
-            "gamenum": "1",
-            "_": str(random.random())
-        }
-        available_redirect_sites = []
-        async with session.post(f'{session_info["logined_domain"]}/{self._config["api_path"]["availalbe_redirect_sites"]}', data=form) as redirect_sites_resp:
-            if redirect_sites_resp.ok:
-                raw_resp_text = await redirect_sites_resp.text()
-                try:
-                    available_redirect_sites = json.loads(raw_resp_text)
-                except json.decoder.JSONDecodeError:
-                    await self.logger.error(f'{self.account} {self.name} 解析資料錯誤')
-                    await self.logger.warning(f'解析資料錯誤: {raw_resp_text}')
-            else:
-                await self.logger.error('{self.account} {self.name} 無法取得重新導向網址')
+            doc =  pq(body)
+            urls = doc('#hide_url')[0].value
+            available_redirect_sites = urls.split('|')
+
         if verify_key:
             fast_domain = await self.select_fast_url(session, available_redirect_sites)
             referer = re.search(r'https?:(//[\w\d._-]+)', session_info['logined_domain']).group(1)
@@ -399,6 +391,8 @@ class TXCrawler:
                         })
             except (aiohttp.client_exceptions.ClientResponseError, aiohttp.client_exceptions.ClientConnectorCertificateError) as ex:
                 await self.logger.warning(f'無法解析回應資料: {ex}')
+            except Exception as ex:
+                await self.logger.warning(f'無法存取該網域(domain): {ex}')
         fastest_domain = None
         if domain_speed_test:
             fastest_domain = min(domain_speed_test, key=lambda d: d['response_time'])['domain']

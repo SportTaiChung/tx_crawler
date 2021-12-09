@@ -30,6 +30,7 @@ opencc = "==0.2"
 xxtea-py = "*"
 cffi = "*"
 aiogram = "*"
+pyquery = "*"
 
 [requires]
 python_version = "3.8"
