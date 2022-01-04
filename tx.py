@@ -27,6 +27,7 @@ import xxtea
 import re
 import pickle
 import aiohttp
+import aiofiles
 import aio_pika
 from fake_useragent import UserAgent
 import json
@@ -164,14 +165,14 @@ class TXCrawler:
                 else:
                     raw_data = await self.crawl_data(session)
                     if self._config['dump']:
-                        with open(f'{self.name}.json', mode='w') as f:
-                            f.write(json.dumps(raw_data, indent=4, ensure_ascii=False))
+                        async with aiofiles.open(f'{self.name}.json', mode='w') as f:
+                            await f.write(json.dumps(raw_data, indent=4, ensure_ascii=False))
                 data = await self.parsing_and_mapping(raw_data)
                 if self._config['dump'] and data:
-                    with open(f'{self.name}.log', mode='w') as f:
-                        f.write(text_format.MessageToString(data, as_utf8=True))
+                    async with aiofiles.open(f'{self.name}.log', mode='w') as f:
+                        await f.write(text_format.MessageToString(data, as_utf8=True))
                 if self._config['dump'] and data:
-                    with open(f'{self.name}.bin', mode='wb') as f:
+                    async with aiofiles.open(f'{self.name}.bin', mode='wb') as f:
                         f.write(data.SerializeToString())
                 await self.upload_data(data)
                 total_execution_time = (datetime.now() - self.last_execution_time).total_seconds()
@@ -392,7 +393,7 @@ class TXCrawler:
             except (aiohttp.client_exceptions.ClientResponseError, aiohttp.client_exceptions.ClientConnectorCertificateError) as ex:
                 await self.logger.warning(f'無法解析回應資料: {ex}')
             except Exception as ex:
-                await self.logger.warning(f'無法存取該網域(domain): {ex}')
+                await self.logger.warning(f'無法存取該網域({domain}): {ex}')
         fastest_domain = None
         if domain_speed_test:
             fastest_domain = min(domain_speed_test, key=lambda d: d['response_time'])['domain']
