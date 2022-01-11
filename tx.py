@@ -100,6 +100,31 @@ class TXCrawler:
         self.headers = self._config['login_headers']
         self._session_login_info_map = {}
         self.data = None
+        self._zero_uszf = protobuf_spec.usZF(
+            homeZF=protobuf_spec.typeZF(line='-0', odds='0'),
+            awayZF=protobuf_spec.typeZF(line='+0', odds='0'),
+        )
+        self._zero_usds = protobuf_spec.typeDS(
+            line='0',
+            over='0',
+            under='0'
+        )
+        self._zero_twzf = protobuf_spec.twZF(
+            homeZF=protobuf_spec.typeZF(line='-0', odds='0'),
+            awayZF=protobuf_spec.typeZF(line='+0', odds='0'),
+        )
+        self._zero_twds = protobuf_spec.typeDS(
+            line='0',
+            over='0',
+            under='0'
+        )
+        self._zero_de = protobuf_spec.onetwo(home='0', away='0')
+        self._zero_sd = protobuf_spec.onetwo(home='0', away='0')
+        self._zero_esre = protobuf_spec.Esre(
+            let=protobuf_spec.home,
+            home='0',
+            away='0'
+        )
 
     def set_logger_factory(self, logger_factory):
         self._logger_factory = logger_factory('tx',
@@ -135,6 +160,7 @@ class TXCrawler:
                 self.logger.add_handler(telegram_handler)
         self.logger.info('開始更新資料')
         session = None
+        task_last_opened_events = {}
         while self._config['_running']:
             if not session or self.account_banned or self.site_maintaining:
                 sessions = await self.init_session()
@@ -167,7 +193,9 @@ class TXCrawler:
                     if self._config['dump']:
                         async with aiofiles.open(f'{self.name}.json', mode='w') as f:
                             await f.write(json.dumps(raw_data, indent=4, ensure_ascii=False))
-                data = await self.parsing_and_mapping(raw_data)
+                last_opened_events = task_last_opened_events.get(self.name, {})
+                data = await self.parsing_and_mapping(raw_data, last_opened_events=last_opened_events)
+                task_last_opened_events[self.name] = last_opened_events
                 if self._config['dump'] and data:
                     async with aiofiles.open(f'{self.name}.log', mode='w') as f:
                         await f.write(text_format.MessageToString(data, as_utf8=True))
@@ -661,7 +689,7 @@ class TXCrawler:
         return base64.b64decode(decrypted_data).decode()
 
     @step_logger('parsing_and_mapping')
-    async def parsing_and_mapping(self, raw_data):
+    async def parsing_and_mapping(self, raw_data, last_opened_events=None):
         event_list_key = Mapping.event_list_key.get(self.task_spec['category'], TX.Key.EVENT_LIST)
         data = protobuf_spec.ApHdcArr()
         # 忽略空資料
@@ -954,6 +982,35 @@ class TXCrawler:
                     self.task_failed = True
                     await self.logger.error(f'{self.account} {self.name} 解析映射資料失敗10次，請確認資料映射正確性', extra={'step': 'parsing_and_mapping', 'execution_id': self.execution_id})
         data.aphdc.extend(event_proto_list)
+        current_opened_events = {}
+        for event in event_proto_list:
+            current_opened_events[event.game_id] = event
+        if last_opened_events:
+            disappear_event_ids = set(last_opened_events.keys()) - set(current_opened_events.keys())
+            current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+            for game_id in disappear_event_ids:
+                event = last_opened_events[game_id]
+                event.source_updatetime = current_time
+                event.usZF.CopyFrom(self._zero_uszf)
+                event.usDS.CopyFrom(self._zero_usds)
+                event.twZF.CopyFrom(self._zero_twzf)
+                event.twDS.CopyFrom(self._zero_twds)
+                event.de.CopyFrom(self._zero_de)
+                event.sd.CopyFrom(self._zero_sd)
+                event.esre.CopyFrom(self._zero_esre)
+                event.draw = '0'
+                event.multi = ''
+                data.aphdc.append(event)
+                await self.logger.warning('賽事(%s,[%s] %s %s %s)消失，送關盤資料',
+                                        game_id,
+                                        event.event_time,
+                                        event.information.league,
+                                        event.information.home.team_name,
+                                        event.information.away.team_name,
+                                        extra={'step': 'parsing_and_mapping'})
+            last_opened_events.clear()
+        last_opened_events.update(current_opened_events)
+
         return data
 
     def get_game_id_key(self, category, period):
