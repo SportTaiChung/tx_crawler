@@ -987,7 +987,7 @@ class TXCrawler:
             current_opened_events[event.game_id] = event
         if last_opened_events:
             disappear_event_ids = set(last_opened_events.keys()) - set(current_opened_events.keys())
-            current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
             for game_id in disappear_event_ids:
                 event = last_opened_events[game_id]
                 event.source_updatetime = current_time
