@@ -1001,13 +1001,12 @@ class TXCrawler:
                 event.draw = '0'
                 event.multi = ''
                 data.aphdc.append(event)
-                await self.logger.warning('賽事(%s,[%s] %s %s %s)消失，送關盤資料',
-                                        game_id,
-                                        event.event_time,
-                                        event.information.league,
-                                        event.information.home.team_name,
-                                        event.information.away.team_name,
-                                        extra={'step': 'parsing_and_mapping'})
+                await self.logger.warning(
+                    '賽事(%s,[%s] %s %s %s)消失，送關盤資料' %
+                    (game_id, event.event_time, event.information.league,
+                     event.information.home.team_name,
+                     event.information.away.team_name),
+                    extra={'step': 'parsing_and_mapping'})
             last_opened_events.clear()
         last_opened_events.update(current_opened_events)
 
