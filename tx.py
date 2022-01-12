@@ -485,7 +485,7 @@ class TXCrawler:
             session_info = self._session_login_info_map[session]
             start_query_time = perf_counter()
             event_list_key = Mapping.event_list_key.get(self.task_spec['category'], TX.Key.EVENT_LIST)
-            async with session.get(f'{session_info["logined_domain"]}/{api_url}', data=form) as api_resp:
+            async with session.get(f'{session_info["logined_domain"]}/{api_url}?{urlencode(form)}') as api_resp:
                 end_query_time = perf_counter()
                 if api_resp.status == 200:
                     encrypted_data = await api_resp.text()
