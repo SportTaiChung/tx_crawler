@@ -985,7 +985,7 @@ class TXCrawler:
         current_opened_events = {}
         for event in event_proto_list:
             current_opened_events[event.game_id] = event
-        if last_opened_events:
+        if last_opened_events and self.task_spec.get('page'):
             disappear_event_ids = set(last_opened_events.keys()) - set(current_opened_events.keys())
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
             for game_id in disappear_event_ids:
