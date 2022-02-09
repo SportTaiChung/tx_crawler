@@ -51,7 +51,9 @@ if __name__ == '__main__':
         for task in secrets['tasks']:
             for target in task['targets']:
                 if target['enabled']:
-                    task_name = f'tx_{task["name"]}_{target["period"]}_{target["category"]}'
+                    task_name = f'tx_{task["name"]}_{target["period"]}_{target["category"]}{target.get("page", "")}'
+                    if target.get('wdls'):
+                        task_name = f'{task_name}_wdls'
                     task_spec = {
                         'crawler_name': task_name,
                         'game_type': task['name'],
