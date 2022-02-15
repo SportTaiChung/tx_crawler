@@ -450,7 +450,7 @@ class TXCrawler:
         events = None
         total_page = self.task_spec.get('total_page') or self.task_spec.get('page') or 1
         for page_number in range(1, total_page + 1):
-            if self.task_spec.get('page') and self.task_spec.get('page') != page_number:
+            if self.task_spec.get('page') != page_number:
                 continue
             game_type = self.task_spec['game_type']
             sport_type = TX.Value.SportType.get_sport_type(game_type)
@@ -458,6 +458,8 @@ class TXCrawler:
             is_world_cup = '0'
             if self.task_spec.get('wdls'):
                 is_world_cup = '4'
+            elif self.task_spec.get('europe_champion'):
+                is_world_cup = '3'
             is_olympic = 'true' if sport_type is TX.Value.SportType.SOCCER_OLYMPIC else 'false'
             if is_olympic == 'true':
                 sport_type = TX.Value.SportType.SOCCER
