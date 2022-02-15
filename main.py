@@ -54,6 +54,8 @@ if __name__ == '__main__':
                     task_name = f'tx_{task["name"]}_{target["period"]}_{target["category"]}{target.get("page", "")}'
                     if target.get('wdls'):
                         task_name = f'{task_name}_wdls'
+                    elif target.get('europe_champion'):
+                        task_name = f'{task_name}_euch'
                     task_spec = {
                         'crawler_name': task_name,
                         'game_type': task['name'],
