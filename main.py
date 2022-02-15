@@ -63,6 +63,7 @@ if __name__ == '__main__':
                         'category': target['category'],
                         'live': target.get('live', False),
                         'wdls': target.get('wdls', False),
+                        'europe_champion': target.get('europe_champion', False),
                         'page': target.get('page')
                     }
                     tasks.append(task_spec)
