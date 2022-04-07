@@ -1161,7 +1161,7 @@ class TXCrawler:
         """Specify game class based on game type and league name"""
         game_class = None
         if game_type is GameType.baseball:
-            if '美國職棒' in league or 'MLB' in league:
+            if ('美國職棒' in league or 'MLB' in league) and '3A' not in league:
                 game_class = GameType.mlb
             elif '日本職業棒球' in league or 'NPB' in league:
                 game_class = GameType.npb
