@@ -376,8 +376,8 @@ class TXCrawler:
         session.cookie_jar.update_cookies({
             'icwN2': '0',
             'bdnotice': '0',
-            f'Tm_{session_info["account"]}_2': '1',
-            f'{session_info["account"]}-2': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            f'Tm_{session_info["account"].upper()}_2': '1',
+            f'{session_info["account"].upper()}-2': datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
         })
         async with session.get(
                 f'{session_info["logined_domain"]}/{self._config["api_path"]["redirect_selection"]}',
@@ -397,7 +397,8 @@ class TXCrawler:
                 'user': session_info['account'],
                 'verify': verify_key,
                 'ismobile': 'False',
-                'homeUrl': referer
+                'homeUrl': referer,
+                'isAllowSM': '1'
             }
             async with session.get(f'{fast_domain}/{self._config["api_path"]["redirect_destination"]}?{urlencode(form)}') as redirect_resp:
                 if redirect_resp.status == 200 and self._config['api_path']['bet_site_home'] in str(redirect_resp.url):
